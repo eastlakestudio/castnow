@@ -1,5 +1,7 @@
 <script setup>
 import { ref, onUnmounted, watch, nextTick, computed, onMounted } from "vue";
+import { useI18n } from "vue-i18n";
+import { setLocale } from "./i18n";
 import { inject as injectAnalytics } from "@vercel/analytics";
 import {
   Monitor,
@@ -23,6 +25,8 @@ import {
   Zap,
   Shield,
 } from "lucide-vue-next";
+
+const { t, locale } = useI18n();
 
 const STATES = {
   LANDING: "LANDING",
@@ -120,12 +124,17 @@ const showToast = (message, type = "info", duration = 3000) => {
   }, duration);
 };
 
+const toggleLanguage = () => {
+  const newLocale = locale.value === "zh" ? "en" : "zh";
+  setLocale(newLocale);
+};
+
 const handleActivatePro = async () => {
   const code = activationCode.value.trim().toUpperCase();
   const formatRegex = /^[0-9A-F]{8}-[0-9A-F]{8}-[0-9A-F]{8}-[0-9A-F]{8}$/i;
 
   if (!formatRegex.test(code)) {
-    showToast("Invalid format. Please use: XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX", "error");
+    showToast(t('pro.format_error'), "error");
     return;
   }
 
@@ -148,14 +157,14 @@ const handleActivatePro = async () => {
       localStorage.setItem("pro_code", code);
       localStorage.setItem("pro_expiry", proExpiresAt.value.toString());
 
-      showToast("Pro Status Activated! Enjoy unlimited casting.", "success");
+      showToast(t('pro.activated_toast'), "success");
     } else {
-      showToast(data.message || "Invalid or expired activation code.", "error");
+      showToast(data.message || t('pro.invalid_toast'), "error");
       isPro.value = false;
     }
   } catch (err) {
     console.error("Activation failed:", err);
-    showToast("Service error. Please try again later.", "error");
+    showToast(t('pro.error_toast'), "error");
   } finally {
     isConnecting.value = false;
   }
@@ -196,17 +205,17 @@ const checkProStatus = async () => {
 const formatExpiry = (timestamp) => {
   if (!timestamp) return "";
   const diff = timestamp - Date.now();
-  if (diff <= 0) return "Expired";
+  if (diff <= 0) return t('common.expired');
 
   const days = Math.floor(diff / (24 * 60 * 60 * 1000));
   const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
 
-  if (days > 0) return `${days}d ${hours}h left`;
-  return `${hours}h left`;
+  if (days > 0) return `${days}${t('common.days_short')} ${hours}${t('common.hours_short')} ${t('common.left')}`;
+  return `${hours}${t('common.hours_short')} ${t('common.left')}`;
 };
 
-const proModalTitle = computed(() => isPro.value ? 'Extend Pro' : 'Activate Pro');
-const proModalDesc = computed(() => isPro.value ? 'You have an active Pro subscription. Enter a new code to extend your time.' : 'Enter your 7-day activation code to unlock unlimited casting time and premium features.');
+const proModalTitle = computed(() => isPro.value ? t('pro.extend_title') : t('pro.activate_title'));
+const proModalDesc = computed(() => isPro.value ? t('pro.extend_desc') : t('pro.activate_desc'));
 
 
 
@@ -248,18 +257,18 @@ const getIceServers = () => {
 const handlePeerError = (err) => {
   console.error("PeerJS Error:", err);
   if (err.type === 'unavailable-id') {
-    error.value = "Code collision. Please try again.";
+    error.value = t('errors.code_collision');
   } else if (err.type === 'peer-unavailable') {
     // Receiver side issue usually
   } else if (err.type === 'network') {
-    error.value = "Network error. Check connection/firewall.";
+    error.value = t('errors.network_error');
   } else if (err.type === 'browser-incompatible' || (err.message && err.message.includes('not support WebRTC'))) {
     // Firefox Block Detection
     showFirefoxGuide.value = true;
     error.value = null; // Hide generic error
     return;
   } else {
-    error.value = `Connection Error: ${err.message}`;
+    error.value = `${t('errors.conn_failed')}: ${err.message}`;
   }
   isConnecting.value = false;
 };
@@ -272,7 +281,7 @@ const handleStartCasting = async (mode) => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
       // iOS WebView 或旧版安卓 WebView 可能不支持
       showToast(
-        "Screen Sharing not supported on this device. Try Camera mode.",
+        t('errors.screen_share_unsupported'),
         "error",
         5000
       );
@@ -338,7 +347,7 @@ const handleStartCasting = async (mode) => {
       isConnecting.value = false;
       return;
     }
-    error.value = "Device access denied or not supported.";
+    error.value = t('errors.device_denied');
     isConnecting.value = false;
     appState.value = STATES.LANDING;
   }
@@ -363,7 +372,7 @@ const toggleCamera = async () => {
       peerInstance.value.call(conn.peer, newStream);
     });
   } catch (err) {
-    showToast("Camera switch failed", "error");
+    showToast(t('errors.camera_switch_failed'), "error");
   }
 };
 
@@ -425,7 +434,7 @@ const handleJoin = () => {
 
     conn.on("error", (err) => {
       console.error("Connection Error", err);
-      error.value = "Connection failed. Check code.";
+      error.value = t('errors.conn_failed');
       isConnecting.value = false;
     });
 
@@ -519,23 +528,32 @@ const resetApp = (forceLanding = false) => {
 
       </div>
       <div class="flex items-center gap-2">
+        <button @click="toggleLanguage"
+          class="flex items-center gap-2 px-3 py-1 bg-slate-800 border border-slate-700 rounded-full hover:bg-slate-700 transition-all group">
+          <Globe class="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-500 transition-colors" />
+          <span class="text-[10px] font-black uppercase tracking-tighter text-slate-300 group-hover:text-white">{{ locale
+            === 'zh' ? 'EN' : '中文' }}</span>
+        </button>
+
         <button v-if="!isPro" @click="showProModal = true"
           class="flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full hover:bg-amber-500/20 transition-all group">
           <Zap class="w-3 h-3 text-amber-500 group-hover:scale-110 transition-transform" />
-          <span class="text-[10px] font-black uppercase tracking-tighter text-amber-500">Upgrade Pro</span>
+          <span class="text-[10px] font-black uppercase tracking-tighter text-amber-500">{{ $t('header.upgrade_pro')
+            }}</span>
         </button>
         <button v-else @click="showProModal = true"
           class="px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full flex flex-col items-end gap-0.5 hover:bg-amber-500/20 transition-all">
           <div class="flex items-center gap-1.5">
             <Zap class="w-2.5 h-2.5 text-amber-500 fill-amber-500" />
-            <span class="text-[9px] font-black uppercase tracking-tighter text-amber-500">PRO 7-DAY</span>
+            <span class="text-[9px] font-black uppercase tracking-tighter text-amber-500">{{ $t('header.pro_7_day')
+              }}</span>
           </div>
           <span class="text-[8px] font-bold text-amber-500/70 uppercase leading-none">{{ formatExpiry(proExpiresAt)
             }}</span>
         </button>
         <div class="px-3 py-1 bg-slate-900 rounded-full border border-slate-800 flex items-center gap-2">
           <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span class="text-[10px] font-bold uppercase tracking-tighter">P2P Secure</span>
+          <span class="text-[10px] font-bold uppercase tracking-tighter">{{ $t('header.p2p_secure') }}</span>
         </div>
       </div>
     </header>
@@ -552,28 +570,28 @@ const resetApp = (forceLanding = false) => {
           <Shield class="w-10 h-10 text-amber-500" />
         </div>
 
-        <h3 class="text-2xl font-black uppercase mb-4 text-white">Firefox Detected</h3>
+        <h3 class="text-2xl font-black uppercase mb-4 text-white">{{ $t('firefox.title') }}</h3>
 
         <p class="text-slate-400 text-sm mb-6 leading-relaxed">
-          Firefox's <strong>"Enhanced Tracking Protection"</strong> is blocking the P2P connection.
+          {{ $t('firefox.desc') }}
         </p>
 
         <div class="bg-black/50 rounded-xl p-4 mb-8 border border-white/5 text-left text-xs text-slate-300 space-y-3">
           <div class="flex items-center gap-3">
             <div class="w-6 h-6 flex items-center justify-center bg-slate-800 rounded-full font-bold text-amber-500">1
             </div>
-            <span>Click the <span class="font-bold text-white">Shield Icon</span> 🛡️ in the URL bar.</span>
+            <span>{{ $t('firefox.step1') }}</span>
           </div>
           <div class="flex items-center gap-3">
             <div class="w-6 h-6 flex items-center justify-center bg-slate-800 rounded-full font-bold text-amber-500">2
             </div>
-            <span>Toggle the switch to <span class="font-bold text-white">OFF</span>.</span>
+            <span>{{ $t('firefox.step2') }}</span>
           </div>
         </div>
 
         <button @click="() => { showFirefoxGuide = false; window.location.reload(); }"
           class="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl uppercase tracking-widest transition-all active:scale-95">
-          I've Fixed It · Retry
+          {{ $t('firefox.retry') }}
         </button>
       </div>
     </div>
@@ -585,27 +603,27 @@ const resetApp = (forceLanding = false) => {
           class="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <div class="mb-4 px-4 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center gap-2">
             <Globe class="w-3 h-3 text-amber-500" />
-            <span class="text-[10px] font-black uppercase text-amber-500 tracking-widest">Secure P2P Protocol
-              Engine</span>
+            <span class="text-[10px] font-black uppercase text-amber-500 tracking-widest">{{ $t('landing.secure_protocol')
+              }}</span>
           </div>
           <h1 class="text-6xl md:text-8xl font-black mb-6 tracking-tighter leading-none">
-            Instant<br /><span class="text-amber-500">Casting.</span>
+            {{ $t('landing.title_part1') }}<br /><span class="text-amber-500">{{ $t('landing.title_part2') }}</span>
           </h1>
           <p class="text-slate-500 max-w-xs mb-10 text-sm font-medium italic">
-            Native performance on Mobile. No install needed for Desktop. Zero Latency P2P.
+            {{ $t('landing.subtitle') }}
           </p>
 
           <div class="flex flex-col gap-4 w-full max-w-xs">
             <button @click="appState = STATES.SOURCE_SELECT"
               class="group relative py-6 bg-amber-500 text-slate-950 rounded-3xl font-black text-xl uppercase shadow-xl shadow-amber-500/20 active:scale-95 transition-all overflow-hidden">
-              <span class="relative z-10">Broadcast</span>
+              <span class="relative z-10">{{ $t('landing.broadcast') }}</span>
               <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform">
               </div>
             </button>
             <button @click="appState = STATES.RECEIVER_INPUT"
               class="py-6 bg-slate-900 border border-slate-800 rounded-3xl font-black text-xl uppercase active:scale-95 transition-all flex items-center justify-center gap-3 hover:border-slate-700">
               <Download class="w-6 h-6" />
-              Receive
+              {{ $t('landing.receive') }}
             </button>
 
 
@@ -613,21 +631,24 @@ const resetApp = (forceLanding = false) => {
             <a href="/CastNow.apk" download
               class="py-4 bg-slate-950 border border-slate-800 rounded-3xl font-black text-sm uppercase active:scale-95 transition-all flex items-center justify-center gap-2 hover:border-amber-500/50 hover:text-amber-500 text-slate-500">
               <Smartphone class="w-4 h-4" />
-              <span>Download Android APK</span>
+              <span>{{ $t('landing.download_apk') }}</span>
             </a>
           </div>
 
 
           <div class="mt-16 flex flex-col items-center gap-6">
             <div class="flex items-center gap-8 text-slate-600 font-bold text-[10px] uppercase tracking-[0.2em]">
-              <button @click="showInfo = 'source'" class="hover:text-amber-500 transition-colors">Source</button>
-              <button @click="showInfo = 'privacy'" class="hover:text-amber-500 transition-colors">Privacy</button>
-              <button @click="showInfo = 'terms'" class="hover:text-amber-500 transition-colors">Terms</button>
+              <button @click="showInfo = 'source'" class="hover:text-amber-500 transition-colors">{{ $t('landing.source')
+                }}</button>
+              <button @click="showInfo = 'privacy'" class="hover:text-amber-500 transition-colors">{{ $t('landing.privacy')
+                }}</button>
+              <button @click="showInfo = 'terms'" class="hover:text-amber-500 transition-colors">{{ $t('landing.terms')
+                }}</button>
             </div>
 
             <div class="text-[9px] font-black text-slate-800 uppercase tracking-[0.2em] flex items-center gap-2">
               <span class="w-4 h-px bg-slate-800"></span>
-              Made by Eastlake Studio
+              {{ $t('landing.made_by') }}
               <span class="w-4 h-px bg-slate-800"></span>
             </div>
           </div>
@@ -637,7 +658,7 @@ const resetApp = (forceLanding = false) => {
         <div v-else-if="appState === STATES.SOURCE_SELECT" class="flex-1 flex flex-col items-center justify-center p-6">
           <h2 class="text-2xl font-black uppercase mb-12 tracking-widest flex items-center gap-3">
             <span class="w-8 h-[2px] bg-amber-500"></span>
-            Choose Source
+            {{ $t('source_select.title') }}
             <span class="w-8 h-[2px] bg-amber-500"></span>
           </h2>
           <div class="grid grid-cols-1 gap-4 w-full max-w-sm">
@@ -649,12 +670,13 @@ const resetApp = (forceLanding = false) => {
                 <Monitor class="w-8 h-8 text-amber-500" />
               </div>
               <div>
-                <span class="block font-black uppercase tracking-widest text-lg">Screen Share</span>
+                <span class="block font-black uppercase tracking-widest text-lg">{{ $t('source_select.screen_share')
+                  }}</span>
                 <p class="text-[10px] text-slate-500 uppercase font-bold mt-1">
                   {{
                     isMobile
-                      ? "Experimental (Android Only)"
-                      : "System Mirroring"
+                      ? $t('source_select.experimental_android')
+                      : $t('source_select.system_mirroring')
                   }}
                 </p>
               </div>
@@ -667,16 +689,16 @@ const resetApp = (forceLanding = false) => {
                 <Camera class="w-8 h-8 text-amber-500" />
               </div>
               <div>
-                <span class="block font-black uppercase tracking-widest text-lg">Camera</span>
+                <span class="block font-black uppercase tracking-widest text-lg">{{ $t('source_select.camera') }}</span>
                 <p class="text-[10px] text-slate-500 uppercase font-bold mt-1">
-                  Mobile Broadcast
+                  {{ $t('source_select.mobile_broadcast') }}
                 </p>
               </div>
             </button>
           </div>
           <button @click="appState = STATES.LANDING"
             class="mt-12 text-slate-500 font-black uppercase tracking-widest text-[10px] hover:text-white transition-colors">
-            ← Cancel Operation
+            {{ $t('source_select.cancel') }}
           </button>
         </div>
 
@@ -691,20 +713,21 @@ const resetApp = (forceLanding = false) => {
             <div class="flex items-center justify-between mb-8">
               <div class="flex items-center gap-2">
                 <Activity class="w-4 h-4 text-amber-500" />
-                <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Active Tunnel</span>
+                <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">{{ $t('sender.active_tunnel')
+                  }}</span>
               </div>
               <button v-if="castingMode === 'camera'" @click="toggleCamera"
                 class="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-full hover:bg-amber-500 hover:text-slate-950 transition-all">
                 <Repeat class="w-3 h-3" />
                 <span class="text-[10px] font-black uppercase">{{
-                  facingMode === "user" ? "Front" : "Back"
+                  facingMode === "user" ? $t('sender.front') : $t('sender.back')
                   }}</span>
               </button>
             </div>
 
             <div class="mb-10">
               <p class="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-4">
-                Sharing Access Key
+                {{ $t('sender.sharing_key') }}
               </p>
               <div class="flex items-center justify-center gap-2">
                 <template v-for="(char, i) in peerId.split('')" :key="i">
@@ -727,14 +750,14 @@ const resetApp = (forceLanding = false) => {
               <div class="absolute bottom-4 left-6 flex items-center gap-3">
                 <div class="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
                 <span class="text-[10px] font-black uppercase tracking-widest">{{
-                  castingMode === "screen" ? "Desktop Mirror" : "Camera Feed"
+                  castingMode === "screen" ? $t('sender.desktop_mirror') : $t('sender.camera_feed')
                 }}</span>
               </div>
             </div>
 
             <button @click="resetApp"
               class="w-full py-5 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white font-black rounded-2xl transition-all border border-red-500/20 uppercase tracking-widest text-xs">
-              Terminate Stream
+              {{ $t('sender.terminate') }}
             </button>
           </div>
         </div>
@@ -744,7 +767,7 @@ const resetApp = (forceLanding = false) => {
           class="flex-1 flex flex-col items-center justify-center p-6">
           <h2 class="text-2xl font-black uppercase mb-10 tracking-widest flex items-center gap-3">
             <span class="w-8 h-[2px] bg-amber-500"></span>
-            Enter Access Key
+            {{ $t('receiver.title') }}
             <span class="w-8 h-[2px] bg-amber-500"></span>
           </h2>
 
@@ -781,19 +804,19 @@ const resetApp = (forceLanding = false) => {
           </div>
 
           <div v-else class="mb-12 text-slate-500 text-xs font-bold uppercase tracking-widest animate-pulse">
-            Type access key via physical keyboard
+            {{ $t('receiver.keyboard_hint') }}
           </div>
 
           <button @click="handleJoin" :disabled="joinCode.length !== 6 || isConnecting"
             class="w-full max-w-[280px] py-5 bg-amber-500 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-black rounded-2xl text-lg uppercase tracking-widest shadow-xl shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
             <Loader2 v-if="isConnecting" class="w-5 h-5 animate-spin" />
-            <span v-else>Connect Now</span>
+            <span v-else>{{ $t('receiver.connect_now') }}</span>
           </button>
 
           <!-- Cancel Button during connecting -->
           <button v-if="isConnecting" @click="resetApp"
             class="mt-4 text-slate-500 font-bold uppercase tracking-widest text-[10px] hover:text-white transition-colors flex items-center gap-2">
-            <X class="w-3 h-3" /> Stop Connecting
+            <X class="w-3 h-3" /> {{ $t('receiver.stop_connecting') }}
           </button>
 
           <p v-if="error" class="mt-4 text-red-500 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
@@ -810,14 +833,14 @@ const resetApp = (forceLanding = false) => {
               <Info class="w-12 h-12 text-amber-500" />
             </div>
             <h3 class="text-3xl font-black uppercase mb-4 tracking-tight text-white">
-              Broadcast Ended
+              {{ $t('ended.title') }}
             </h3>
             <p class="text-slate-400 text-base mb-10 font-medium">
-              The session has been terminated by the broadcaster.
+              {{ $t('ended.desc') }}
             </p>
             <button @click="resetApp(true)"
               class="w-full py-6 bg-amber-500 text-slate-950 font-black rounded-2xl uppercase tracking-widest text-sm active:scale-95 transition-all shadow-xl shadow-amber-500/20">
-              Back to Home
+              {{ $t('ended.back_home') }}
             </button>
           </div>
         </div>
@@ -837,7 +860,7 @@ const resetApp = (forceLanding = false) => {
             :class="{ 'opacity-0': !showControls }">
             <button @click="resetApp"
               class="flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md rounded-full text-white/90 hover:bg-white/20 transition-all font-bold text-sm">
-              <ArrowLeft class="w-4 h-4" /> Leave
+              <ArrowLeft class="w-4 h-4" /> {{ $t('active.leave') }}
             </button>
           </div>
 
@@ -847,7 +870,8 @@ const resetApp = (forceLanding = false) => {
             <div>
               <div class="flex items-center gap-2 mb-2">
                 <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                <span class="text-red-500 text-[10px] font-black uppercase tracking-widest">Live Feed</span>
+                <span class="text-red-500 text-[10px] font-black uppercase tracking-widest">{{ $t('active.live_feed')
+                  }}</span>
                 <div v-if="!isPro"
                   class="ml-2 px-2 py-0.5 bg-slate-800/80 backdrop-blur-md rounded-md border border-slate-700 flex items-center gap-1.5 transition-opacity duration-300"
                   :class="{ 'opacity-100': remainingSeconds < 300, 'opacity-0': remainingSeconds >= 300 && !showControls }">
@@ -856,13 +880,14 @@ const resetApp = (forceLanding = false) => {
                     class="w-1.5 h-1.5 rounded-full"></div>
                   <span class="text-[9px] font-bold"
                     :class="{ 'text-red-500': remainingSeconds < 300, 'text-slate-300': remainingSeconds >= 300 }">
-                    {{ remainingSeconds < 300 ? `Ending in ${Math.floor(remainingSeconds / 60)}:${(remainingSeconds %
-                      60).toString().padStart(2, '0')}` : 'Free Session: 30m Limit' }} </span>
+                    {{ remainingSeconds < 300 ? $t('active.ending_in', {
+                      time: `${Math.floor(remainingSeconds / 60)}:${(remainingSeconds %
+                        60).toString().padStart(2, '0')}` }) : $t('active.free_limit') }} </span>
                 </div>
 
 
               </div>
-              <h3 class="text-white font-bold text-lg">P2P Secure Stream</h3>
+              <h3 class="text-white font-bold text-lg">{{ $t('active.stream_title') }}</h3>
             </div>
 
 
@@ -896,14 +921,13 @@ const resetApp = (forceLanding = false) => {
           <div class="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center mb-6">
             <Globe class="w-8 h-8 text-amber-500" />
           </div>
-          <h3 class="text-2xl font-black uppercase mb-4 tracking-tight text-white">Source Code</h3>
+          <h3 class="text-2xl font-black uppercase mb-4 tracking-tight text-white">{{ $t('info.source_title') }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed mb-8">
-            CastNow is an open-source high-performance P2P engine. The source code is available on GitHub under the MIT
-            license for community contributions and transparency.
+            {{ $t('info.source_desc') }}
           </p>
           <a href="https://github.com/MinghuaLiu1977/castnow" target="_blank"
             class="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 text-slate-950 font-black rounded-xl uppercase tracking-widest text-[10px] hover:scale-105 transition-transform active:scale-95">
-            View on GitHub
+            {{ $t('info.view_github') }}
           </a>
         </div>
 
@@ -911,35 +935,34 @@ const resetApp = (forceLanding = false) => {
           <div class="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center mb-6">
             <Activity class="w-8 h-8 text-amber-500" />
           </div>
-          <h3 class="text-2xl font-black uppercase mb-4 tracking-tight text-white">Privacy Policy</h3>
+          <h3 class="text-2xl font-black uppercase mb-4 tracking-tight text-white">{{ $t('info.privacy_title') }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed mb-4">
-            We value your privacy. CastNow utilizes direct **End-to-End Peer-to-Peer** connections.
+            {{ $t('info.privacy_intro') }}
           </p>
           <ul class="text-slate-500 text-[11px] space-y-2 mb-8">
-            <li>• Your stream data never touches our servers.</li>
-            <li>• No recordings are stored or processed by us.</li>
-            <li>• We do not collect or sell personal demographic data.</li>
+            <li>• {{ $t('info.privacy_item1') }}</li>
+            <li>• {{ $t('info.privacy_item2') }}</li>
+            <li>• {{ $t('info.privacy_item3') }}</li>
           </ul>
           <button @click="showInfo = null"
-            class="w-full py-4 bg-slate-800 text-white font-black rounded-xl uppercase tracking-widest text-[10px] active:scale-95 transition-all">Close</button>
+            class="w-full py-4 bg-slate-800 text-white font-black rounded-xl uppercase tracking-widest text-[10px] active:scale-95 transition-all">{{
+              $t('info.close') }}</button>
         </div>
 
         <div v-else-if="showInfo === 'terms'">
           <div class="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center mb-6">
             <Info class="w-8 h-8 text-amber-500" />
           </div>
-          <h3 class="text-2xl font-black uppercase mb-4 tracking-tight text-white">Terms of Service</h3>
+          <h3 class="text-2xl font-black uppercase mb-4 tracking-tight text-white">{{ $t('info.terms_title') }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed mb-6">
-            By using CastNow, you agree that you are solely responsible for the content you broadcast.
+            {{ $t('info.terms_desc') }}
           </p>
           <p class="text-slate-500 text-[11px] italic mb-8 border-l-2 border-amber-500/20 pl-4">
-            The service is provided 'as is' without warranties of any kind. Misuse of the platform for illegal
-            activities
-            will result in termination of service availability.
+            {{ $t('info.terms_note') }}
           </p>
           <button @click="showInfo = null"
-            class="w-full py-4 bg-slate-800 text-white font-black rounded-xl uppercase tracking-widest text-[10px] active:scale-95 transition-all">Agree
-            & Close</button>
+            class="w-full py-4 bg-slate-800 text-white font-black rounded-xl uppercase tracking-widest text-[10px] active:scale-95 transition-all">{{
+              $t('info.agree_close') }}</button>
         </div>
       </div>
     </div>

@@ -1,0 +1,103 @@
+{
+    "header": {
+        "upgrade_pro": "Upgrade Pro",
+        "pro_7_day": "PRO 7-DAY",
+        "p2p_secure": "P2P Secure"
+    },
+    "landing": {
+        "secure_protocol": "Secure P2P Protocol Engine",
+        "title_part1": "Instant",
+        "title_part2": "Casting.",
+        "subtitle": "Native performance on Mobile. No install needed for Desktop. Zero Latency P2P.",
+        "broadcast": "Broadcast",
+        "receive": "Receive",
+        "download_apk": "Download Android APK",
+        "source": "Source",
+        "privacy": "Privacy",
+        "terms": "Terms",
+        "made_by": "Made by Eastlake Studio"
+    },
+    "source_select": {
+        "title": "Choose Source",
+        "screen_share": "Screen Share",
+        "camera": "Camera",
+        "experimental_android": "Experimental (Android Only)",
+        "system_mirroring": "System Mirroring",
+        "mobile_broadcast": "Mobile Broadcast",
+        "cancel": "← Cancel Operation"
+    },
+    "sender": {
+        "active_tunnel": "Active Tunnel",
+        "front": "Front",
+        "back": "Back",
+        "sharing_key": "Sharing Access Key",
+        "desktop_mirror": "Desktop Mirror",
+        "camera_feed": "Camera Feed",
+        "terminate": "Terminate Stream"
+    },
+    "receiver": {
+        "title": "Enter Access Key",
+        "keyboard_hint": "Type access key via physical keyboard",
+        "connect_now": "Connect Now",
+        "stop_connecting": "Stop Connecting"
+    },
+    "pro": {
+        "activate_title": "Activate Pro",
+        "extend_title": "Extend Pro",
+        "activate_desc": "Enter your 7-day activation code to unlock unlimited casting time and premium features.",
+        "extend_desc": "You have an active Pro subscription. Enter a new code to extend your time.",
+        "activated_toast": "Pro Status Activated! Enjoy unlimited casting.",
+        "invalid_toast": "Invalid or expired activation code.",
+        "error_toast": "Service error. Please try again later.",
+        "format_error": "Invalid format. Please use: XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
+    },
+    "firefox": {
+        "title": "Firefox Detected",
+        "desc": "Firefox's \"Enhanced Tracking Protection\" is blocking the P2P connection.",
+        "step1": "Click the Shield Icon 🛡️ in the URL bar.",
+        "step2": "Toggle the switch to OFF.",
+        "retry": "I've Fixed It · Retry"
+    },
+    "errors": {
+        "screen_share_unsupported": "Screen Sharing not supported on this device. Try Camera mode.",
+        "device_denied": "Device access denied or not supported.",
+        "code_collision": "Code collision. Please try again.",
+        "network_error": "Network error. Check connection/firewall.",
+        "conn_failed": "Connection failed. Check code.",
+        "service_error": "Service error. Please try again later.",
+        "camera_switch_failed": "Camera switch failed"
+    },
+    "ended": {
+        "title": "Broadcast Ended",
+        "desc": "The session has been terminated by the broadcaster.",
+        "back_home": "Back to Home"
+    },
+    "active": {
+        "leave": "Leave",
+        "live_feed": "Live Feed",
+        "ending_in": "Ending in {time}",
+        "free_limit": "Free Session: 30m Limit",
+        "stream_title": "P2P Secure Stream"
+    },
+    "info": {
+        "source_title": "Source Code",
+        "source_desc": "CastNow is an open-source high-performance P2P engine. The source code is available on GitHub under the MIT license for community contributions and transparency.",
+        "view_github": "View on GitHub",
+        "privacy_title": "Privacy Policy",
+        "privacy_intro": "We value your privacy. CastNow utilizes direct **End-to-End Peer-to-Peer** connections.",
+        "privacy_item1": "Your stream data never touches our servers.",
+        "privacy_item2": "No recordings are stored or processed by us.",
+        "privacy_item3": "We do not collect or sell personal demographic data.",
+        "terms_title": "Terms of Service",
+        "terms_desc": "By using CastNow, you agree that you are solely responsible for the content you broadcast.",
+        "terms_note": "The service is provided 'as is' without warranties of any kind. Misuse of the platform for illegal activities will result in termination of service availability.",
+        "close": "Close",
+        "agree_close": "Agree & Close"
+    },
+    "common": {
+        "left": "left",
+        "expired": "Expired",
+        "days_short": "d",
+        "hours_short": "h"
+    }
+}
