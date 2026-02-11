@@ -6,8 +6,8 @@
     },
     "landing": {
         "secure_protocol": "Secure P2P Protocol Engine",
-        "title_part1": "Instant",
-        "title_part2": "Casting.",
+        "title_part1": "Instant ",
+        "title_part2": "Casting",
         "subtitle": "Native performance on Mobile. No install needed for Desktop. Zero Latency P2P.",
         "broadcast": "Broadcast",
         "receive": "Receive",

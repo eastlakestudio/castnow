@@ -607,7 +607,7 @@ const resetApp = (forceLanding = false) => {
               }}</span>
           </div>
           <h1 class="text-6xl md:text-8xl font-black mb-6 tracking-tighter leading-none">
-            {{ $t('landing.title_part1') }}<br /><span class="text-amber-500">{{ $t('landing.title_part2') }}</span>
+            {{ $t('landing.title_part1') }}<span class="text-amber-500">{{ $t('landing.title_part2') }}</span>
           </h1>
           <p class="text-slate-500 max-w-xs mb-10 text-sm font-medium italic">
             {{ $t('landing.subtitle') }}
