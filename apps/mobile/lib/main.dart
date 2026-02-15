@@ -11,9 +11,6 @@ import 'package:peerdart/peerdart.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 
 // --- Constants & Theme ---
 const Color kBackgroundColor = Color(0xFF020617);
@@ -64,72 +61,12 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool _isPro = false;
-
-  bool _isVerifying = false;
+  // Paid App Model: Always Pro
+  final bool _isPro = true;
 
   @override
   void initState() {
     super.initState();
-    _loadProStatus();
-  }
-
-  Future<void> _loadProStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isPro = prefs.getBool('is_pro') ?? false;
-    });
-  }
-
-  Future<void> _saveProStatus(bool status, String? key) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('is_pro', status);
-    if (key != null) await prefs.setString('license_key', key);
-    setState(() {
-      _isPro = status;
-    });
-  }
-
-  Future<void> _verifyLicense(String key) async {
-    if (key.isEmpty) return;
-    setState(() => _isVerifying = true);
-
-    try {
-      final response = await http.post(
-        Uri.parse('https://castnow.vercel.app/api/verify-pass'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'licenseKey': key}),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['valid'] == true) {
-          await _saveProStatus(true, key);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text("Activation Successful! Enjoy CastNow Pro."),
-                  backgroundColor: Colors.green),
-            );
-            Navigator.pop(context); // Close dialog
-          }
-        } else {
-          throw Exception(data['message'] ?? 'Invalid license key');
-        }
-      } else {
-        throw Exception('Server error: ${response.statusCode}');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text("Activation Failed: $e"),
-              backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isVerifying = false);
-    }
   }
 
   Future<void> _launchURL(String url) async {
@@ -168,143 +105,6 @@ class _HomeScreenState extends State<HomeScreen> {
           )
         ],
       ),
-    );
-  }
-
-  void _showProDialog(BuildContext context) {
-    final TextEditingController controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: kSurfaceColor,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          contentPadding: EdgeInsets.zero,
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: const BoxDecoration(
-                    color: kPrimaryColor,
-                    borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(24)),
-                  ),
-                  child: const Column(
-                    children: [
-                      Icon(Icons.stars_rounded, color: Colors.black, size: 48),
-                      SizedBox(height: 12),
-                      Text("CastNow Pro",
-                          style: TextStyle(
-                              color: Colors.black,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      _buildProFeature(
-                          Icons.timer_off_rounded, "Unlimited Session Time"),
-                      const SizedBox(height: 12),
-                      _buildProFeature(Icons.event_available_rounded,
-                          "7-Day Activation Pass"),
-                      const SizedBox(height: 12),
-                      _buildProFeature(
-                          Icons.speed_rounded, "Priority P2P Tunneling"),
-                      const SizedBox(height: 24),
-                      if (!_isPro) ...[
-                        TextField(
-                          controller: controller,
-                          decoration: InputDecoration(
-                            hintText: "Enter Activation Code",
-                            hintStyle: const TextStyle(color: Colors.white24),
-                            filled: true,
-                            fillColor: Colors.black26,
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none),
-                          ),
-                          style: const TextStyle(color: kPrimaryColor),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _isVerifying
-                                ? null
-                                : () => _verifyLicense(controller.text),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: kPrimaryColor,
-                              foregroundColor: Colors.black,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: _isVerifying
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: Colors.black))
-                                : const Text("ACTIVATE NOW",
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text("OR",
-                            style: TextStyle(
-                                color: Colors.white24,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 12),
-                      ],
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () => _launchURL(
-                              "https://minghster.gumroad.com/l/ihhtg"),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: kPrimaryColor),
-                            foregroundColor: kPrimaryColor,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: const Text("BUY ON GUMROAD",
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                      if (_isPro) ...[
-                        const SizedBox(height: 24),
-                        const Text("✓ PRO ACTIVATED",
-                            style: TextStyle(
-                                color: Colors.green,
-                                fontWeight: FontWeight.bold)),
-                      ]
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProFeature(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, color: kPrimaryColor, size: 20),
-        const SizedBox(width: 12),
-        Expanded(
-            child: Text(text,
-                style: const TextStyle(color: kTextPrimary, fontSize: 14))),
-      ],
     );
   }
 
@@ -526,30 +326,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           // Floating PRO Button
-          Positioned(
-            top: MediaQuery.of(context).padding.top + (isLandscape ? 12 : 20),
-            left: isLandscape ? 32 : 24, // Moved to left
-            child: GestureDetector(
-              onTap: () => _showProDialog(context),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: kPrimaryColor,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                        color: kPrimaryColor.withOpacity(0.3), blurRadius: 10)
-                  ],
-                ),
-                child: Text(_isPro ? "PRO ACTIVE" : "GET PRO",
-                    style: const TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 10)),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -645,10 +421,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   String? _peerId;
   bool _isScreenSharing = false;
 
-  bool _isBroadcasting = false;
-  Timer? _sessionTimer;
-  int _remainingSeconds = 1800; // 30 minutes
-  Timer? _countdownTimer;
   final List<DataConnection> _connections = [];
 
   bool _isLoading = false;
@@ -658,28 +430,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     super.initState();
     _initRenderer();
     WakelockPlus.enable();
-
-    // Start Countdown for Free Users
-    if (!widget.isPro) {
-      _startCountdown();
-    }
-  }
-
-  void _startCountdown() {
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_remainingSeconds > 0) {
-        if (mounted) setState(() => _remainingSeconds--);
-      } else {
-        timer.cancel();
-        _stopBroadcast();
-      }
-    });
-  }
-
-  String _formatDuration(int seconds) {
-    int m = seconds ~/ 60;
-    int s = seconds % 60;
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
   Future<void> _initRenderer() async {
@@ -707,9 +457,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     if (!mounted || _isStopping) return;
     _isStopping = true;
 
-    _sessionTimer?.cancel();
-    _sessionTimer = null;
-
     // 1. Close Peer & Connections
     _peer?.dispose();
     _peer = null;
@@ -733,7 +480,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
       // Optional: Reset state if not popped (shouldn't happen if pushed correctly)
       setState(() {
-        _isBroadcasting = false;
         _peerId = null;
         _isLoading = false;
       });
@@ -856,16 +602,27 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             };
           }
         } else if (Platform.isIOS) {
-          // Trigger System Broadcast Picker via our custom native bridge
+          // 1. Request Screen Capture via getDisplayMedia with 'broadcast' deviceId
+          // This starts the socket server in the helper extension architecture.
+          debugPrint(
+              "📸 Requesting iOS Screen Capture (deviceId: broadcast)...");
+          _localStream = await navigator.mediaDevices.getDisplayMedia({
+            'video': {
+              'deviceId': 'broadcast',
+            },
+            'audio': false
+          });
+          debugPrint("✅ iOS Screen Capture stream prepared.");
+
+          // 2. Trigger System Broadcast Picker via our custom native bridge
+          // Since getDisplayMedia on iOS doesn't always automatically show the picker on all OS versions/setups,
+          // we use our native picker launcher as a reliable trigger.
           debugPrint("🚀 Launching iOS Broadcast Picker...");
           const channel = MethodChannel('media_projection');
           await channel.invokeMethod('startMediaProjectionService');
 
-          // Note: On iOS, showing the picker doesn't immediately return a stream.
-          // The extension will start sending frames to the socket一旦用户确认。
-          // We set loading back to false so the user can see the status once connected.
+          // We don't return here! We need to continue and setup the peer.
           setState(() => _isLoading = false);
-          return;
         }
       } else {
         // Camera source
@@ -889,28 +646,12 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         if (!mounted) return;
         setState(() {
           _peerId = id;
-
           _isLoading = false;
-
-          // Start Session Limit Timer for Free Users
-          if (!widget.isPro) {
-            _sessionTimer = Timer(const Duration(minutes: 30), () {
-              if (mounted && _isBroadcasting) {
-                _stopBroadcast();
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text(
-                      "Free session limited to 30 minutes. Please reconnect or upgrade to Pro."),
-                  duration: Duration(seconds: 5),
-                ));
-              }
-            });
-          }
         });
       });
 
       _peer!.on("connection").listen((conn) {
         _connections.add(conn);
-        _isBroadcasting = true;
         // Auto-minimize app after receiver connects (Android Screen Share only)
         if (_isScreenSharing && !kIsWeb && Platform.isAndroid) {
           const channel0 = MethodChannel('media_projection');
@@ -973,8 +714,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   @override
   void dispose() {
     debugPrint("🧹 Disposing BroadcastScreenState");
-    _countdownTimer?.cancel();
-    _sessionTimer?.cancel();
     _stopBroadcast();
     WakelockPlus.disable();
     super.dispose();
@@ -999,45 +738,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: _remainingSeconds < 300
-                        ? Colors.red.withOpacity(0.1)
-                        : Colors.red.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: _remainingSeconds < 300
-                            ? Colors.redAccent.withOpacity(0.5)
-                            : Colors.red.withOpacity(0.2)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.timer_outlined,
-                          color: _remainingSeconds < 300
-                              ? Colors.redAccent
-                              : Colors.red.withOpacity(0.5),
-                          size: 16),
-                      const SizedBox(width: 8),
-                      Text(
-                        widget.isPro
-                            ? "UNLIMITED SESSION"
-                            : (_remainingSeconds < 300
-                                ? "ENDING IN ${_formatDuration(_remainingSeconds)}"
-                                : "FREE SESSION: 30M LIMIT"),
-                        style: TextStyle(
-                            color: _remainingSeconds < 300
-                                ? Colors.redAccent
-                                : Colors.red.withOpacity(0.7),
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1),
-                      ),
-                    ],
-                  ),
-                ),
                 const SizedBox(height: 32),
                 isLandscape
                     ? Row(
@@ -1077,178 +777,176 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            Column(
-              children: [
-                // Header
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(20)),
-                        child: Row(children: [
-                          Icon(Icons.circle,
-                              color:
-                                  _isScreenSharing ? Colors.blue : Colors.red,
-                              size: 12),
-                          const SizedBox(width: 8),
-                          Text(_isScreenSharing ? "SHARING SCREEN" : "ON AIR",
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 12)),
-                        ]),
-                      ),
-                      IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close, color: Colors.white))
-                    ],
-                  ),
+            SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: MediaQuery.of(context).size.height -
+                      MediaQuery.of(context).padding.top -
+                      MediaQuery.of(context).padding.bottom,
                 ),
-
-                const Spacer(),
-
-                // Constrained Video Preview
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: isLandscape ? 400 : double.infinity,
-                      maxHeight: isLandscape ? 200 : 300,
-                    ),
-                    child: AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: Colors.white10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.5),
-                              blurRadius: 20,
-                              spreadRadius: 5,
-                            )
-                          ],
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: _localStream != null
-                            ? RTCVideoView(_localRenderer,
-                                mirror: !_isScreenSharing,
-                                objectFit: RTCVideoViewObjectFit
-                                    .RTCVideoViewObjectFitContain)
-                            : Container(),
-                      ),
-                    ),
-                  ),
-                ),
-
-                const Spacer(),
-
-                // Code Display
-                if (_peerId != null)
-                  Container(
-                    margin: const EdgeInsets.all(24),
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: kSurfaceColor.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: Colors.white10),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text("SHARING ACCESS KEY",
-                            style: TextStyle(
-                                color: kTextSecondary,
-                                fontSize: 10,
-                                letterSpacing: 2,
-                                fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: _peerId!
-                              .split('')
-                              .map((char) => Container(
-                                    width: 36,
-                                    height: 48,
-                                    margin: const EdgeInsets.symmetric(
-                                        horizontal: 2),
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                        color: Colors.black,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                            color: kPrimaryColor
-                                                .withOpacity(0.5))),
-                                    child: Text(char,
-                                        style: const TextStyle(
-                                            fontSize: 24,
-                                            fontWeight: FontWeight.bold,
-                                            color: kPrimaryColor)),
-                                  ))
-                              .toList(),
-                        ),
-                        const SizedBox(height: 20),
-                        if (!_isScreenSharing)
-                          TextButton.icon(
-                            onPressed: _switchCamera,
-                            icon: const Icon(Icons.flip_camera_ios,
-                                color: Colors.white),
-                            label: const Text("Switch Camera",
-                                style: TextStyle(color: Colors.white)),
-                          ),
-                        if (!widget.isPro && _remainingSeconds < 300) ...[
-                          const SizedBox(height: 12),
-                          const Divider(color: Colors.white10),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.timer_outlined,
-                                  color: Colors.redAccent, size: 16),
+                child: Column(
+                  children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 10),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(20)),
+                            child: Row(children: [
+                              Icon(Icons.circle,
+                                  color: _isScreenSharing
+                                      ? Colors.blue
+                                      : Colors.red,
+                                  size: 12),
                               const SizedBox(width: 8),
                               Text(
-                                "SESSION ENDS IN: ${_formatDuration(_remainingSeconds)}",
-                                style: const TextStyle(
-                                    color: Colors.redAccent,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ],
+                                  _isScreenSharing
+                                      ? "SHARING SCREEN"
+                                      : "ON AIR",
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12)),
+                            ]),
                           ),
+                          IconButton(
+                              onPressed: () => Navigator.pop(context),
+                              icon:
+                                  const Icon(Icons.close, color: Colors.white))
                         ],
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _stopBroadcast,
-                            icon: const Icon(Icons.stop_circle_rounded,
-                                color: Colors.white),
-                            label: const Text("TERMINATE STREAM",
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red.withOpacity(0.2),
-                              foregroundColor: Colors.redAccent,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  side: BorderSide(
-                                      color:
-                                          Colors.redAccent.withOpacity(0.3))),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Constrained Video Preview
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: isLandscape ? 400 : double.infinity,
+                          maxHeight: isLandscape ? 200 : 300,
+                        ),
+                        child: AspectRatio(
+                          aspectRatio: 16 / 9,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: Colors.white10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.5),
+                                  blurRadius: 20,
+                                  spreadRadius: 5,
+                                )
+                              ],
                             ),
+                            clipBehavior: Clip.antiAlias,
+                            child: _localStream != null
+                                ? RTCVideoView(_localRenderer,
+                                    mirror: !_isScreenSharing,
+                                    objectFit: RTCVideoViewObjectFit
+                                        .RTCVideoViewObjectFitContain)
+                                : Container(),
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-              ],
+
+                    const SizedBox(height: 20),
+
+                    // Code Display
+                    if (_peerId != null)
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 24),
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: kSurfaceColor.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text("SHARING ACCESS KEY",
+                                style: TextStyle(
+                                    color: kTextSecondary,
+                                    fontSize: 10,
+                                    letterSpacing: 2,
+                                    fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: _peerId!
+                                  .split('')
+                                  .map((char) => Container(
+                                        width: 36,
+                                        height: 48,
+                                        margin: const EdgeInsets.symmetric(
+                                            horizontal: 2),
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                            color: Colors.black,
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                                color: kPrimaryColor
+                                                    .withOpacity(0.5))),
+                                        child: Text(char,
+                                            style: const TextStyle(
+                                                fontSize: 24,
+                                                fontWeight: FontWeight.bold,
+                                                color: kPrimaryColor)),
+                                      ))
+                                  .toList(),
+                            ),
+                            const SizedBox(height: 20),
+                            if (!_isScreenSharing)
+                              TextButton.icon(
+                                onPressed: _switchCamera,
+                                icon: const Icon(Icons.flip_camera_ios,
+                                    color: Colors.white),
+                                label: const Text("Switch Camera",
+                                    style: TextStyle(color: Colors.white)),
+                              ),
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _stopBroadcast,
+                                icon: const Icon(Icons.stop_circle_rounded,
+                                    color: Colors.white),
+                                label: const Text("TERMINATE STREAM",
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red.withOpacity(0.2),
+                                  foregroundColor: Colors.redAccent,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      side: BorderSide(
+                                          color: Colors.redAccent
+                                              .withOpacity(0.3))),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 40),
+                  ],
+                ),
+              ),
             ),
             if (_isLoading)
               Container(
@@ -1359,7 +1057,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       });
     });
 
-    peer.on("call").listen((mediaConnection) {
+    peer.on("call").listen((mediaConnection) async {
       debugPrint("Received call from ${mediaConnection.peer}");
 
       // --- WebRTC Debug Logs ---
@@ -1376,8 +1074,21 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         debugPrint("🏠 [手机端候选地址]: ${candidate.candidate}");
       };
 
-      // Answer the call (no stream sent back)
-      mediaConnection.answer(null);
+      // Answer the call. peerdart explicitly requires a non-null MediaStream.
+      // We create a dummy stream for "receive-only" mode.
+      // Note: This might ask for microphone permission if we ask for audio.
+      // We try to ask for nothing if possible, but WebRTC usually demands at least one track.
+      // Let's try audio only as it is less intrusive than camera.
+      MediaStream dummyStream;
+      try {
+        dummyStream = await navigator.mediaDevices
+            .getUserMedia({'audio': true, 'video': false});
+      } catch (e) {
+        debugPrint("Error creating dummy stream: $e");
+        return;
+      }
+
+      mediaConnection.answer(dummyStream);
       mediaConnection.on("stream").listen((stream) {
         debugPrint("Received remote stream: ${stream.id}");
         debugPrint("Video tracks: ${stream.getVideoTracks().length}");
@@ -1425,12 +1136,16 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           children: [
             RTCVideoView(_remoteRenderer,
                 objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain),
-            Positioned(
-              top: 40,
-              left: 20,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black26,
+                  ),
+                ),
               ),
             )
           ],
@@ -1458,31 +1173,6 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.red.withOpacity(0.3)),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.timer_outlined,
-                              color: Colors.redAccent, size: 16),
-                          SizedBox(width: 8),
-                          Text(
-                            "FREE SESSION: 30M LIMIT",
-                            style: TextStyle(
-                                color: Colors.redAccent,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1),
-                          ),
-                        ],
-                      ),
-                    ),
                     const SizedBox(height: 32),
                     const Text("ENTER ACCESS KEY",
                         style: TextStyle(

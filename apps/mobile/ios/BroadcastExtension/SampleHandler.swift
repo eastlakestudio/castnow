@@ -99,7 +99,7 @@ class SampleHandler: RPBroadcastSampleHandler {
     private var frameCount = 0
     
     // IMPORTANT: This must match the App Group ID configured in Xcode
-    private let appGroupIdentifier = "group.com.castnow.app" // Replace if different
+    private let appGroupIdentifier = "group.com.eastlakestudio.castnow.app" // Replace if different
     
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
         // Path to the socket used by flutter_webrtc
