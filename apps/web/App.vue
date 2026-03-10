@@ -504,6 +504,11 @@ const resetApp = (forceLanding = false) => {
               <Download class="w-6 h-6" />
               {{ $t('landing.receive') }}
             </button>
+            <div
+              class="py-4 bg-slate-950 border border-slate-800 rounded-3xl font-black text-sm uppercase flex items-center justify-center gap-2 text-slate-500 cursor-not-allowed opacity-80">
+              <Apple class="w-4 h-4" />
+              <span>{{ $t('landing.app_store_soon') }}</span>
+            </div>
 
 
           </div>
