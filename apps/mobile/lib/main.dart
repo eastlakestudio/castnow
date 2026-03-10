@@ -11,6 +11,9 @@ import 'package:peerdart/peerdart.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // --- Constants & Theme ---
 const Color kBackgroundColor = Color(0xFF020617);
@@ -18,6 +21,9 @@ const Color kSurfaceColor = Color(0xFF0F172A);
 const Color kPrimaryColor = Color(0xFFF59E0B);
 const Color kTextPrimary = Color(0xFFF8FAFC);
 const Color kTextSecondary = Color(0xFF94A3B8);
+
+const String kProProductId = 'com.eastlakestudio.castnow.app';
+const String kProVersionKey = 'is_pro_version';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,12 +67,213 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Paid App Model: Always Pro
-  final bool _isPro = true;
+  // Paid App Model: Pro version check
+  bool _isPro = false;
+  late StreamSubscription<List<PurchaseDetails>> _subscription;
 
   @override
   void initState() {
     super.initState();
+    _loadProStatus();
+    _initializeIAP();
+  }
+
+  Future<void> _loadProStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isPro = prefs.getBool(kProVersionKey) ?? false;
+    });
+  }
+
+  void _initializeIAP() {
+    final Stream<List<PurchaseDetails>> purchaseUpdated =
+        InAppPurchase.instance.purchaseStream;
+    _subscription = purchaseUpdated.listen((purchaseDetailsList) {
+      _listenToPurchaseUpdated(purchaseDetailsList);
+    }, onDone: () {
+      _subscription.cancel();
+    }, onError: (error) {
+      // Handle error here
+    });
+  }
+
+  void _listenToPurchaseUpdated(List<PurchaseDetails> purchaseDetailsList) {
+    purchaseDetailsList.forEach((PurchaseDetails purchaseDetails) async {
+      if (purchaseDetails.status == PurchaseStatus.pending) {
+        // Show pending UI
+      } else {
+        if (purchaseDetails.status == PurchaseStatus.error) {
+          // Show error UI
+        } else if (purchaseDetails.status == PurchaseStatus.purchased ||
+            purchaseDetails.status == PurchaseStatus.restored) {
+          _updateProStatus(true);
+        }
+        if (purchaseDetails.pendingCompletePurchase) {
+          await InAppPurchase.instance.completePurchase(purchaseDetails);
+        }
+      }
+    });
+  }
+
+  Future<void> _updateProStatus(bool isPro) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(kProVersionKey, isPro);
+    setState(() {
+      _isPro = isPro;
+    });
+  }
+
+  Future<void> _buyPro() async {
+    try {
+      final bool available = await InAppPurchase.instance.isAvailable();
+      if (!available) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Store not available')),
+          );
+        }
+        return;
+      }
+
+      final ProductDetailsResponse response =
+          await InAppPurchase.instance.queryProductDetails({kProProductId});
+
+      if (response.notFoundIDs.isNotEmpty) {
+        debugPrint("Product not found: ${response.notFoundIDs}");
+      }
+
+      if (response.productDetails.isNotEmpty) {
+        final productDetails = response.productDetails.first;
+        final PurchaseParam purchaseParam =
+            PurchaseParam(productDetails: productDetails);
+        await InAppPurchase.instance.buyNonConsumable(purchaseParam: purchaseParam);
+      }
+    } catch (e) {
+      debugPrint("Purchase error: $e");
+    }
+  }
+
+  void _showProDialog() async {
+    String price = "---";
+    try {
+      final ProductDetailsResponse response =
+          await InAppPurchase.instance.queryProductDetails({kProProductId});
+      if (response.productDetails.isNotEmpty) {
+        price = response.productDetails.first.price;
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.5),
+                blurRadius: 40,
+                offset: const Offset(0, 20),
+              )
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: kPrimaryColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.auto_awesome_rounded,
+                    color: kPrimaryColor, size: 40),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                "Upgrade to Pro",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                "Unlock all features and enjoy seamless screen sharing experience.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: kTextSecondary, fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              _buildProFeature(Icons.timer_off_rounded, "Unlimited Casting Time"),
+              _buildProFeature(Icons.bolt_rounded, "Faster Connection"),
+              _buildProFeature(Icons.hd_rounded, "High Definition Quality"),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _buyPro();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimaryColor,
+                    foregroundColor: Colors.black,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: Text(
+                    "Unlock for $price",
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  "Later",
+                  style: TextStyle(color: kTextSecondary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProFeature(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, color: kPrimaryColor, size: 20),
+          const SizedBox(width: 12),
+          Text(
+            text,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
   }
 
   Future<void> _launchURL(String url) async {
@@ -177,9 +384,35 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          "Native P2P Screen Sharing",
-          style: TextStyle(color: kTextSecondary, letterSpacing: 1.2),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.language_rounded, color: kTextSecondary, size: 14),
+            const SizedBox(width: 6),
+            const Text(
+              "Receive on: ",
+              style: TextStyle(color: kTextSecondary, fontSize: 12),
+            ),
+            GestureDetector(
+              onTap: () => _launchURL("https://castnow.vercel.app"),
+              child: Container(
+                padding: const EdgeInsets.only(bottom: 2), // Spacing
+                decoration: const BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: kPrimaryColor, width: 0.8),
+                  ),
+                ),
+                child: const Text(
+                  "castnow.vercel.app",
+                  style: TextStyle(
+                    color: kPrimaryColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -325,7 +558,57 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
           ),
-          // Floating PRO Button
+          // Refined Top-Right PRO Badge / Status
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 12,
+            right: 20,
+            child: GestureDetector(
+              onTap: _isPro ? null : _showProDialog,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: _isPro
+                      ? const LinearGradient(
+                          colors: [Color(0xFF334155), Color(0xFF1E293B)],
+                        )
+                      : const LinearGradient(
+                          colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                        ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: _isPro ? Colors.white10 : Colors.white24,
+                      width: 0.5),
+                  boxShadow: [
+                    if (!_isPro)
+                      BoxShadow(
+                        color: kPrimaryColor.withOpacity(0.4),
+                        blurRadius: 15,
+                        spreadRadius: -2,
+                        offset: const Offset(0, 6),
+                      )
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                        _isPro ? Icons.verified_rounded : Icons.stars_rounded,
+                        color: _isPro ? const Color(0xFF38BDF8) : Colors.black,
+                        size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      _isPro ? "PRO" : "GO PRO",
+                      style: TextStyle(
+                          color: _isPro ? Colors.white.withOpacity(0.9) : Colors.black,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -405,6 +688,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// --- iOS Native Picker Widget ---
+class IOSBroadcastPicker extends StatelessWidget {
+  final double width;
+  final double height;
+
+  const IOSBroadcastPicker({
+    super.key,
+    this.width = 120,
+    this.height = 120,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (defaultTargetPlatform != TargetPlatform.iOS) {
+      return const SizedBox.shrink();
+    }
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: const UiKitView(
+        viewType: 'castnow_picker_view',
+        creationParams: {},
+        creationParamsCodec: StandardMessageCodec(),
+      ),
+    );
+  }
+}
+
 // --- Broadcast Screen (Sender) ---
 class BroadcastScreen extends StatefulWidget {
   final bool isPro;
@@ -420,16 +732,62 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   String? _peerId;
   bool _isScreenSharing = false;
-
   final List<DataConnection> _connections = [];
-
   bool _isLoading = false;
+
+  // Time Limit Logic
+  Timer? _limitTimer;
+  int _remainingSeconds = 600; // 10 minutes
+
+  // Manual trigger via MethodChannel
+  static const _pickerControlChannel = MethodChannel('castnow_picker_control');
+
+  Future<void> _triggerPicker() async {
+    try {
+      if (Platform.isIOS) {
+        final deviceInfo = DeviceInfoPlugin();
+        final iosInfo = await deviceInfo.iosInfo;
+        if (!iosInfo.isPhysicalDevice) {
+          if (mounted) {
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text("⚠️ 模拟器限制"),
+                content: const Text(
+                    "你当前正在使用 iOS 模拟器。\n\n苹果系统规定：模拟器不支持 ReplayKit 录屏功能，点击不会弹出菜单。\n\n请切换到【真机】进行测试。"),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text("确认"))
+                ],
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      debugPrint("📢 Manually triggering broadcast picker via native...");
+      final bool? success =
+          await _pickerControlChannel.invokeMethod<bool>('triggerPicker');
+      debugPrint("✅ Trigger success: $success");
+    } catch (e) {
+      debugPrint("❌ Error triggering picker: $e");
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _initRenderer();
     WakelockPlus.enable();
+
+    // Listen for logs from native code
+    _pickerControlChannel.setMethodCallHandler((call) async {
+      if (call.method == "nativeLog") {
+        debugPrint("🍎 NATIVE: ${call.arguments}");
+      }
+    });
   }
 
   Future<void> _initRenderer() async {
@@ -555,7 +913,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               return;
             }
           }
-          const channel = MethodChannel('media_projection');
+          const channel = MethodChannel('castnow_picker');
 
           // 1. Start Media Projection Service
           // The native code will handle the Android 14 bridge/polling automatically.
@@ -602,26 +960,38 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             };
           }
         } else if (Platform.isIOS) {
-          // 1. Request Screen Capture via getDisplayMedia with 'broadcast' deviceId
+          // 0. Environment check
+          final deviceInfo = DeviceInfoPlugin();
+          final iosInfo = await deviceInfo.iosInfo;
+          if (!iosInfo.isPhysicalDevice) {
+            debugPrint("❌ Environment Error: Simulator detected.");
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("iOS 模拟器不支持录屏，请使用真机")));
+            setState(() => _isLoading = false);
+            return;
+          }
+
+          // 1. First, Request Microphone permission
+          debugPrint("🎤 Step 1: Requesting Microphone permission...");
+          await Permission.microphone.request();
+
+          // 2. Second, Request Screen Capture via getDisplayMedia
           // This starts the socket server in the helper extension architecture.
           debugPrint(
-              "📸 Requesting iOS Screen Capture (deviceId: broadcast)...");
+              "📸 Step 2: Starting socket server (deviceId: broadcast)...");
           _localStream = await navigator.mediaDevices.getDisplayMedia({
             'video': {
               'deviceId': 'broadcast',
             },
             'audio': false
           });
-          debugPrint("✅ iOS Screen Capture stream prepared.");
+          debugPrint(
+              "✅ iOS Screen Capture stream prepared. Stream ID: ${_localStream?.id}");
 
-          // 2. Trigger System Broadcast Picker via our custom native bridge
-          // Since getDisplayMedia on iOS doesn't always automatically show the picker on all OS versions/setups,
-          // we use our native picker launcher as a reliable trigger.
-          debugPrint("🚀 Launching iOS Broadcast Picker...");
-          const channel = MethodChannel('media_projection');
-          await channel.invokeMethod('startMediaProjectionService');
+          // 3. Signal user to pick
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("服务已就绪，请点击下方按钮启动录屏")));
 
-          // We don't return here! We need to continue and setup the peer.
           setState(() => _isLoading = false);
         }
       } else {
@@ -664,6 +1034,25 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         }
       });
 
+      // Start timer if not PRO
+      if (!widget.isPro) {
+        _remainingSeconds = 600;
+        _limitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          if (!mounted) {
+            timer.cancel();
+            return;
+          }
+          setState(() {
+            if (_remainingSeconds > 0) {
+              _remainingSeconds--;
+            } else {
+              timer.cancel();
+              _showTimeUpDialog();
+            }
+          });
+        });
+      }
+
       setState(() {});
     } catch (e) {
       debugPrint("Error starting broadcast: $e");
@@ -671,7 +1060,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       // Attempt to clean up native service if it was started
       try {
         if (Platform.isAndroid) {
-          const channel = MethodChannel('media_projection');
+          const channel = MethodChannel('castnow_picker');
           await channel.invokeMethod('stopMediaProjectionService');
         }
       } catch (_) {}
@@ -711,9 +1100,31 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     }
   }
 
+  void _showTimeUpDialog() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Time Limit Reached"),
+        content: const Text(
+            "Free version is limited to 10 minutes per session.\n\nPlease upgrade to PRO for unlimited casting."),
+        actions: [
+          TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _stopBroadcast();
+              },
+              child: const Text("CLOSE"))
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     debugPrint("🧹 Disposing BroadcastScreenState");
+    _limitTimer?.cancel();
     _stopBroadcast();
     WakelockPlus.disable();
     super.dispose();
@@ -813,6 +1224,23 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                                   style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 12)),
+                              if (!widget.isPro) ...[
+                                const SizedBox(width: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                      color: Colors.white24,
+                                      borderRadius: BorderRadius.circular(8)),
+                                  child: Text(
+                                    "${(_remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}",
+                                    style: const TextStyle(
+                                        fontFamily: 'monospace',
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
                             ]),
                           ),
                           IconButton(
@@ -881,6 +1309,23 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                                     fontSize: 10,
                                     letterSpacing: 2,
                                     fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            RichText(
+                              textAlign: TextAlign.center,
+                              text: const TextSpan(
+                                style: TextStyle(
+                                    color: Colors.white70, fontSize: 13),
+                                children: [
+                                  TextSpan(text: "Browser receiver: "),
+                                  TextSpan(
+                                    text: "castnow.vercel.app",
+                                    style: TextStyle(
+                                        color: kPrimaryColor,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
                             const SizedBox(height: 16),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -907,6 +1352,46 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                                       ))
                                   .toList(),
                             ),
+                            if (_isScreenSharing && Platform.isIOS) ...[
+                              const SizedBox(height: 16),
+                              // 1. The visible but possibly non-clickable native icon (for system linkage)
+                              const IOSBroadcastPicker(
+                                width: 80,
+                                height: 80,
+                              ),
+                              const SizedBox(height: 12),
+                              // 2. The large, reliable Flutter button as requested by user
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: _triggerPicker,
+                                  icon: const Icon(Icons.touch_app_rounded,
+                                      color: Colors.white),
+                                  label: const Text("TAP TO START BROADCAST",
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          letterSpacing: 1)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: kPrimaryColor,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 18),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                        side: const BorderSide(
+                                            color: Colors.white24)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                "If popup doesn't appear, ensure Screen Recording is allowed in Settings",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Colors.white38, fontSize: 10),
+                              ),
+                            ],
                             const SizedBox(height: 20),
                             if (!_isScreenSharing)
                               TextButton.icon(
@@ -916,27 +1401,18 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                                 label: const Text("Switch Camera",
                                     style: TextStyle(color: Colors.white)),
                               ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 16),
                             SizedBox(
                               width: double.infinity,
-                              child: ElevatedButton.icon(
+                              child: TextButton.icon(
                                 onPressed: _stopBroadcast,
-                                icon: const Icon(Icons.stop_circle_rounded,
-                                    color: Colors.white),
-                                label: const Text("TERMINATE STREAM",
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1)),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red.withOpacity(0.2),
-                                  foregroundColor: Colors.redAccent,
+                                icon: const Icon(Icons.close_rounded,
+                                    color: Colors.white54),
+                                label: const Text("CANCEL / TERMINATE",
+                                    style: TextStyle(color: Colors.white54)),
+                                style: TextButton.styleFrom(
                                   padding:
-                                      const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      side: BorderSide(
-                                          color: Colors.redAccent
-                                              .withOpacity(0.3))),
+                                      const EdgeInsets.symmetric(vertical: 12),
                                 ),
                               ),
                             ),

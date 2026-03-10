@@ -1,7 +1,5 @@
 {
     "header": {
-        "upgrade_pro": "升级 Pro",
-        "pro_7_day": "7天专业版",
         "p2p_secure": "P2P 安全传输"
     },
     "landing": {
@@ -41,16 +39,6 @@
         "connect_now": "立即连接",
         "stop_connecting": "停止连接"
     },
-    "pro": {
-        "activate_title": "激活专业版",
-        "extend_title": "续费专业版",
-        "activate_desc": "输入您的 7 天激活码以解锁无限投屏时间和高级功能。",
-        "extend_desc": "您已激活专业版。输入新代码以延长有效期。",
-        "activated_toast": "专业版已激活！享受无限投屏。",
-        "invalid_toast": "激活码无效或已过期。",
-        "error_toast": "服务错误。请稍后再试。",
-        "format_error": "格式错误。请使用: XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
-    },
     "firefox": {
         "title": "检测到 Firefox",
         "desc": "Firefox 的“增强型跟踪保护”正在阻止 P2P 连接。",
@@ -75,8 +63,6 @@
     "active": {
         "leave": "离开",
         "live_feed": "实时画面",
-        "ending_in": "{time} 后结束",
-        "free_limit": "免费会话：30分钟限制",
         "stream_title": "P2P 安全传输流"
     },
     "info": {

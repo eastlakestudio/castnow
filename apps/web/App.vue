@@ -38,7 +38,7 @@ const STATES = {
 };
 
 const appState = ref(STATES.LANDING);
-const isPro = ref(false); // Currently visual only or tied to a future validation logic
+const isPro = ref(true); // Web version is now free for everyone
 const castingMode = ref("screen");
 const facingMode = ref("user");
 const isConnecting = ref(false);
@@ -98,21 +98,7 @@ watch([remoteVideo, remoteStream], ([el, stream]) => {
       el.onloadedmetadata = playVideo;
     }
 
-    // Start Session Limit Timer for Free Users if not already started
-    if (!isPro.value && !sessionInterval) {
-      remainingSeconds.value = 1800;
-      sessionInterval = setInterval(() => {
-        if (remainingSeconds.value > 0) {
-          remainingSeconds.value--;
-        } else {
-          if (appState.value === STATES.RECEIVER_ACTIVE) {
-            appState.value = STATES.BROADCAST_ENDED;
-            resetApp();
-            appState.value = STATES.BROADCAST_ENDED;
-          }
-        }
-      }, 1000);
-    }
+    // Session limit removed for web version
   }
 });
 
@@ -129,93 +115,7 @@ const toggleLanguage = () => {
   setLocale(newLocale);
 };
 
-const handleActivatePro = async () => {
-  const code = activationCode.value.trim().toUpperCase();
-  const formatRegex = /^[0-9A-F]{8}-[0-9A-F]{8}-[0-9A-F]{8}-[0-9A-F]{8}$/i;
-
-  if (!formatRegex.test(code)) {
-    showToast(t('pro.format_error'), "error");
-    return;
-  }
-
-  isConnecting.value = true;
-  try {
-    const response = await fetch("https://castnow.vercel.app/api/verify-pass", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ licenseKey: code }),
-    });
-
-    const data = await response.json();
-
-    if (data.valid) {
-      isPro.value = true;
-      activeCode.value = code;
-      proExpiresAt.value = Date.now() + data.expiresIn * 1000;
-      showProModal.value = false;
-
-      localStorage.setItem("pro_code", code);
-      localStorage.setItem("pro_expiry", proExpiresAt.value.toString());
-
-      showToast(t('pro.activated_toast'), "success");
-    } else {
-      showToast(data.message || t('pro.invalid_toast'), "error");
-      isPro.value = false;
-    }
-  } catch (err) {
-    console.error("Activation failed:", err);
-    showToast(t('pro.error_toast'), "error");
-  } finally {
-    isConnecting.value = false;
-  }
-};
-
-const checkProStatus = async () => {
-  const code = localStorage.getItem("pro_code");
-  if (!code) return;
-
-  activeCode.value = code;
-  try {
-    const response = await fetch("https://castnow.vercel.app/api/verify-pass", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ licenseKey: code }),
-    });
-    const data = await response.json();
-    if (data.valid) {
-      isPro.value = true;
-      proExpiresAt.value = Date.now() + data.expiresIn * 1000;
-      localStorage.setItem("pro_expiry", proExpiresAt.value.toString());
-    } else {
-      isPro.value = false;
-      localStorage.removeItem("pro_code");
-      localStorage.removeItem("pro_expiry");
-    }
-  } catch (err) {
-    console.error("Pro verification failed:", err);
-    // If offline/error, trust the last known expiry but don't clear it yet
-    const cachedExpiry = localStorage.getItem("pro_expiry");
-    if (cachedExpiry && parseInt(cachedExpiry) > Date.now()) {
-      isPro.value = true;
-      proExpiresAt.value = parseInt(cachedExpiry);
-    }
-  }
-};
-
-const formatExpiry = (timestamp) => {
-  if (!timestamp) return "";
-  const diff = timestamp - Date.now();
-  if (diff <= 0) return t('common.expired');
-
-  const days = Math.floor(diff / (24 * 60 * 60 * 1000));
-  const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-
-  if (days > 0) return `${days}${t('common.days_short')} ${hours}${t('common.hours_short')} ${t('common.left')}`;
-  return `${hours}${t('common.hours_short')} ${t('common.left')}`;
-};
-
-const proModalTitle = computed(() => isPro.value ? t('pro.extend_title') : t('pro.activate_title'));
-const proModalDesc = computed(() => isPro.value ? t('pro.extend_desc') : t('pro.activate_desc'));
+// Pro modal logic removed
 
 
 
@@ -402,7 +302,6 @@ const handleKeyDown = (e) => {
 
 onMounted(() => {
   window.addEventListener("keydown", handleKeyDown);
-  checkProStatus();
 });
 
 onUnmounted(() => {
@@ -535,26 +434,6 @@ const resetApp = (forceLanding = false) => {
             === 'zh' ? 'EN' : '中文' }}</span>
         </button>
 
-        <button v-if="!isPro" @click="showProModal = true"
-          class="flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full hover:bg-amber-500/20 transition-all group">
-          <Zap class="w-3 h-3 text-amber-500 group-hover:scale-110 transition-transform" />
-          <span class="text-[10px] font-black uppercase tracking-tighter text-amber-500">{{ $t('header.upgrade_pro')
-            }}</span>
-        </button>
-        <button v-else @click="showProModal = true"
-          class="px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full flex flex-col items-end gap-0.5 hover:bg-amber-500/20 transition-all">
-          <div class="flex items-center gap-1.5">
-            <Zap class="w-2.5 h-2.5 text-amber-500 fill-amber-500" />
-            <span class="text-[9px] font-black uppercase tracking-tighter text-amber-500">{{ $t('header.pro_7_day')
-              }}</span>
-          </div>
-          <span class="text-[8px] font-bold text-amber-500/70 uppercase leading-none">{{ formatExpiry(proExpiresAt)
-            }}</span>
-        </button>
-        <div class="px-3 py-1 bg-slate-900 rounded-full border border-slate-800 flex items-center gap-2">
-          <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span class="text-[10px] font-bold uppercase tracking-tighter">{{ $t('header.p2p_secure') }}</span>
-        </div>
       </div>
     </header>
 
@@ -872,20 +751,6 @@ const resetApp = (forceLanding = false) => {
                 <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
                 <span class="text-red-500 text-[10px] font-black uppercase tracking-widest">{{ $t('active.live_feed')
                   }}</span>
-                <div v-if="!isPro"
-                  class="ml-2 px-2 py-0.5 bg-slate-800/80 backdrop-blur-md rounded-md border border-slate-700 flex items-center gap-1.5 transition-opacity duration-300"
-                  :class="{ 'opacity-100': remainingSeconds < 300, 'opacity-0': remainingSeconds >= 300 && !showControls }">
-                  <div
-                    :class="{ 'bg-red-500 animate-pulse': remainingSeconds < 300, 'bg-slate-400': remainingSeconds >= 300 }"
-                    class="w-1.5 h-1.5 rounded-full"></div>
-                  <span class="text-[9px] font-bold"
-                    :class="{ 'text-red-500': remainingSeconds < 300, 'text-slate-300': remainingSeconds >= 300 }">
-                    {{ remainingSeconds < 300 ? $t('active.ending_in', {
-                      time: `${Math.floor(remainingSeconds / 60)}:${(remainingSeconds %
-                        60).toString().padStart(2, '0')}` }) : $t('active.free_limit') }} </span>
-                </div>
-
-
               </div>
               <h3 class="text-white font-bold text-lg">{{ $t('active.stream_title') }}</h3>
             </div>
@@ -967,50 +832,7 @@ const resetApp = (forceLanding = false) => {
       </div>
     </div>
 
-    <!-- Pro Activation Modal -->
-    <div v-if="showProModal"
-      class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl"
-      @click.self="showProModal = false">
-      <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-[2.5rem] p-10 shadow-2xl relative">
-        <button @click="showProModal = false"
-          class="absolute top-8 right-8 text-slate-500 hover:text-white transition-colors">
-          <X class="w-6 h-6" />
-        </button>
-
-        <div class="text-center">
-          <div class="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
-            <Zap class="w-8 h-8 text-amber-500 fill-amber-500" />
-          </div>
-          <h3 class="text-2xl font-black uppercase mb-2 tracking-tight text-white">{{ proModalTitle }}</h3>
-          <p class="text-slate-400 text-sm mb-8">
-            {{ proModalDesc }}
-          </p>
-
-          <div v-if="isPro" class="mb-6 p-4 bg-slate-950 border border-amber-500/20 rounded-2xl text-left">
-            <div class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Current License</div>
-            <div class="text-xs font-mono text-amber-500 break-all mb-3">{{ activeCode }}</div>
-            <div class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Status</div>
-            <div class="text-xs font-bold text-white uppercase">{{ formatExpiry(proExpiresAt) }}</div>
-          </div>
-
-          <div class="mb-6">
-            <input v-model="activationCode" type="text" placeholder="FCCA8ACF-..."
-              class="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-4 text-center text-sm font-mono tracking-wider text-amber-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-              @keyup.enter="handleActivatePro" />
-          </div>
-
-          <button @click="handleActivatePro" :disabled="isConnecting"
-            class="w-full py-4 bg-amber-500 disabled:bg-slate-700 text-slate-900 font-black rounded-2xl uppercase tracking-widest text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-amber-500/20 mb-4">
-            {{ isConnecting ? 'Verifying...' : (isPro ? 'Extend Activation' : 'Verify & Activate') }}
-          </button>
-
-          <a href="https://minghster.gumroad.com/l/ihhtg" target="_blank"
-            class="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-amber-500 transition-colors">
-            Don't have a code? Purchase here
-          </a>
-        </div>
-      </div>
-    </div>
+    <!-- Pro Activation Modal Removed -->
 
     <!-- Toast Notification -->
     <Transition name="fade">

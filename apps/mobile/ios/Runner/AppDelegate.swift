@@ -9,87 +9,123 @@ import ReplayKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
-    let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
     
-    // Register channel after a small delay to ensure rootViewController is available
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-        if let controller = self.window?.rootViewController as? FlutterViewController {
-            let channel = FlutterMethodChannel(name: "media_projection", binaryMessenger: controller.binaryMessenger)
-            channel.setMethodCallHandler({ [weak self] (call, result) in
-                print("📲 Native received method call: \(call.method)")
-                if call.method == "startMediaProjectionService" {
-                    self?.showBroadcastPicker()
-                    result(nil)
-                } else {
-                    result(FlutterMethodNotImplemented)
-                }
-            })
-            print("✅ Native MethodChannel 'media_projection' registered successfully.")
-        } else {
-            print("❌ Error: rootViewController is STILL not a FlutterViewController after delay.")
-        }
-    }
-    
-    return result
-  }
-
-  private func showBroadcastPicker() {
-    DispatchQueue.main.async {
-      if #available(iOS 12.0, *) {
-        let pickerView = RPSystemBroadcastPickerView(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
-        pickerView.preferredExtension = "com.eastlakestudio.castnow.app.BroadcastExtension"
-        pickerView.showsMicrophoneButton = false
-        
-        // Find the key window reliably
-        let window = UIApplication.shared.connectedScenes
-            .filter { $0.activationState == .foregroundActive }
-            .map { $0 as? UIWindowScene }
-            .compactMap { $0 }
-            .first?.windows
-            .filter { $0.isKeyWindow }.first
-            ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })
-            ?? UIApplication.shared.keyWindow
-        
-        if let keyWindow = window {
-          keyWindow.addSubview(pickerView)
-          pickerView.center = keyWindow.center
-          pickerView.alpha = 0.01
-          
-          // Small delay to ensure subviews are loaded
-          DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-              print("🔍 Searching for Broadcast Picker button...")
-              var foundButton = false
-              for view in pickerView.subviews {
-                if let button = view as? UIButton {
-                  print("✅ Found button in direct subviews, clicking...")
-                  button.sendActions(for: .touchUpInside)
-                  foundButton = true
-                  break
-                }
-              }
-              
-              if !foundButton {
-                  print("⚠️ Button not found in direct subviews, searching deeper...")
-                  // Fallback: If not found, try a deeper search
-                  self.searchAndClickButton(in: pickerView)
-              }
-              
-              DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                  pickerView.removeFromSuperview()
-              }
+    // 1. Register PlatformView & MethodChannel
+    if let registrar = self.registrar(forPlugin: "CastNowPickerPlugin") {
+      let factory = BroadcastPickerFactory()
+      registrar.register(factory, withId: "castnow_picker_view")
+      
+      // 2. Register MethodChannel to trigger the picker manually
+      let triggerChannel = FlutterMethodChannel(name: "castnow_picker_control", binaryMessenger: registrar.messenger())
+      BroadcastPickerManager.shared.channel = triggerChannel
+      
+      triggerChannel.setMethodCallHandler { (call, result) in
+          if call.method == "triggerPicker" {
+              BroadcastPickerManager.shared.trigger()
+              result(true)
+          } else {
+              result(FlutterMethodNotImplemented)
           }
-        }
       }
+      print("✅ [CASTNOW] PlatformView and ControlChannel registered.")
+      BroadcastPickerManager.shared.log("✅ Native logic initialized")
+    } else {
+      print("❌ [CASTNOW] Failed to get registrar for CastNowPickerPlugin")
     }
+    
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
+}
 
-  private func searchAndClickButton(in view: UIView) {
-    for subview in view.subviews {
-        if let button = subview as? UIButton {
-            button.sendActions(for: .touchUpInside)
+// Global manager to hold and trigger the picker
+class BroadcastPickerManager {
+    static let shared = BroadcastPickerManager()
+    weak var currentPicker: RPSystemBroadcastPickerView?
+    var channel: FlutterMethodChannel?
+    
+    func log(_ message: String) {
+        // Use print for debugger console, avoid NSLog to bypass hook conflicts
+        print("[BroadcastPickerManager] \(message)")
+        DispatchQueue.main.async {
+            self.channel?.invokeMethod("nativeLog", arguments: message)
+        }
+    }
+    func trigger() {
+        guard let picker = currentPicker else {
+            log("❌ Trigger failed: picker is nil")
             return
         }
-        searchAndClickButton(in: subview)
+        
+        // Find the UIButton inside the picker hierarchy
+        func findButton(in view: UIView) -> UIButton? {
+            if let button = view as? UIButton { return button }
+            for subview in view.subviews {
+                if let found = findButton(in: subview) { return found }
+            }
+            return nil
+        }
+
+        if let button = findButton(in: picker) {
+            log("📢 Clicking native broadcast button...")
+            // Avoid complicated string interpolation of the button itself
+            button.sendActions(for: .touchUpInside)
+            log("✅ Trigger sent")
+        } else {
+            log("❌ UI Matcher failed")
+        }
     }
-  }
+}
+
+// --- PlatformView Implementation ---
+
+class BroadcastPickerFactory: NSObject, FlutterPlatformViewFactory {
+    func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
+        return BroadcastPickerView(frame: frame)
+    }
+}
+
+class BroadcastPickerView: NSObject, FlutterPlatformView {
+    private var _container: PickerWrapperView
+
+    init(frame: CGRect) {
+        let pickerView = RPSystemBroadcastPickerView(frame: frame)
+        pickerView.preferredExtension = "com.eastlakestudio.castnow.app.BroadcastExtension"
+        pickerView.showsMicrophoneButton = false
+        pickerView.backgroundColor = .clear
+        
+        BroadcastPickerManager.shared.currentPicker = pickerView
+        
+        _container = PickerWrapperView(picker: pickerView)
+        super.init()
+    }
+
+    func view() -> UIView {
+        return _container
+    }
+}
+
+class PickerWrapperView: UIView {
+    private let picker: RPSystemBroadcastPickerView
+    
+    init(picker: RPSystemBroadcastPickerView) {
+        self.picker = picker
+        super.init(frame: .zero)
+        
+        addSubview(picker)
+        picker.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            picker.topAnchor.constraint(equalTo: topAnchor),
+            picker.bottomAnchor.constraint(equalTo: bottomAnchor),
+            picker.leadingAnchor.constraint(equalTo: leadingAnchor),
+            picker.trailingAnchor.constraint(equalTo: trailingAnchor)
+        ])
+        
+        // Clean UI for real device testing
+        self.backgroundColor = .clear
+        self.isUserInteractionEnabled = true
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 }

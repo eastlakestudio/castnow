@@ -1,7 +1,5 @@
 {
     "header": {
-        "upgrade_pro": "Upgrade Pro",
-        "pro_7_day": "PRO 7-DAY",
         "p2p_secure": "P2P Secure"
     },
     "landing": {
@@ -41,16 +39,6 @@
         "connect_now": "Connect Now",
         "stop_connecting": "Stop Connecting"
     },
-    "pro": {
-        "activate_title": "Activate Pro",
-        "extend_title": "Extend Pro",
-        "activate_desc": "Enter your 7-day activation code to unlock unlimited casting time and premium features.",
-        "extend_desc": "You have an active Pro subscription. Enter a new code to extend your time.",
-        "activated_toast": "Pro Status Activated! Enjoy unlimited casting.",
-        "invalid_toast": "Invalid or expired activation code.",
-        "error_toast": "Service error. Please try again later.",
-        "format_error": "Invalid format. Please use: XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
-    },
     "firefox": {
         "title": "Firefox Detected",
         "desc": "Firefox's \"Enhanced Tracking Protection\" is blocking the P2P connection.",
@@ -75,8 +63,6 @@
     "active": {
         "leave": "Leave",
         "live_feed": "Live Feed",
-        "ending_in": "Ending in {time}",
-        "free_limit": "Free Session: 30m Limit",
         "stream_title": "P2P Secure Stream"
     },
     "info": {

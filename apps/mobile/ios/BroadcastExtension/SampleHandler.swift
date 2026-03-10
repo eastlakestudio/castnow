@@ -38,9 +38,14 @@ class SocketConnection {
         }
         
         let pathStr = (filePath as NSString).utf8String
-        withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
-            // Bind path safely
-            strlcpy(UnsafeMutableRawPointer(ptr).assumingMemoryBound(to: CChar.self), pathStr, 104)
+        if let pathStr = pathStr {
+            withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
+                // Bind path safely
+                strlcpy(UnsafeMutableRawPointer(ptr).assumingMemoryBound(to: CChar.self), pathStr, 104)
+            }
+        } else {
+            print("❌ Invalid socket path string")
+            return false
         }
         
         let len = socklen_t(MemoryLayout<sockaddr_un>.size)
@@ -71,23 +76,26 @@ class SocketConnection {
     }
     
     func send(data: Data) -> Bool {
-        guard socketHandle >= 0 else { return false }
-        
         return data.withUnsafeBytes { buffer in
             guard let baseAddress = buffer.baseAddress else { return false }
-            
-            var sent = 0
-            while sent < data.count {
-                let result = write(socketHandle, baseAddress.advanced(by: sent), data.count - sent)
-                if result < 0 {
-                    if errno == EINTR { continue }
-                    return false
-                }
-                if result == 0 { return false }
-                sent += result
-            }
-            return true
+            return send(baseAddress: baseAddress, count: data.count)
         }
+    }
+
+    func send(baseAddress: UnsafeRawPointer, count: Int) -> Bool {
+        guard socketHandle >= 0 else { return false }
+        
+        var sent = 0
+        while sent < count {
+            let result = write(socketHandle, baseAddress.advanced(by: sent), count - sent)
+            if result < 0 {
+                if errno == EINTR { continue }
+                return false
+            }
+            if result == 0 { return false }
+            sent += result
+        }
+        return true
     }
 }
 
@@ -183,8 +191,8 @@ class SampleHandler: RPBroadcastSampleHandler {
             }
             
             // Send Body
-            let body = Data(bytes: baseAddress, count: dataLen)
-            if !client.send(data: body) {
+            // Direct send from baseAddress to avoid memory copy
+            if !client.send(baseAddress: baseAddress, count: dataLen) {
                 print("❌ Failed to send body")
                 return
             }

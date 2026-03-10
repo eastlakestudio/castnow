@@ -2,7 +2,7 @@
 name: castnow_app
 description: "CastNow Mobile Client - Native P2P Screen Sharing"
 publish_to: 'none'
-version: 1.0.0+3
+version: 1.0.0+5
 
 environment:
   sdk: '>=3.2.3 <4.0.0'
@@ -23,6 +23,8 @@ dependencies:
   url_launcher: ^6.3.2
   shared_preferences: ^2.2.2
   http: ^1.2.0
+  device_info_plus: ^12.3.0
+  in_app_purchase: ^3.2.3
 
 dev_dependencies:
   flutter_test:
