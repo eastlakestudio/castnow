@@ -506,12 +506,6 @@ const resetApp = (forceLanding = false) => {
             </button>
 
 
-            <!-- Android Download Button (Native APK) -->
-            <a href="/CastNow.apk" download
-              class="py-4 bg-slate-950 border border-slate-800 rounded-3xl font-black text-sm uppercase active:scale-95 transition-all flex items-center justify-center gap-2 hover:border-amber-500/50 hover:text-amber-500 text-slate-500">
-              <Smartphone class="w-4 h-4" />
-              <span>{{ $t('landing.download_apk') }}</span>
-            </a>
           </div>
 
 
