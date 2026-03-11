@@ -30,8 +30,6 @@
 	<string>Camera access is needed for video streaming.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Local network access is needed for P2P connections.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Microphone access is needed for audio streaming.</string>
 	<key>RTCAppGroupIdentifier</key>
 	<string>group.com.eastlakestudio.castnow.app</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
@@ -42,8 +40,6 @@
 	<string>Main</string>
 	<key>UIBackgroundModes</key>
 	<array>
-		<string>audio</string>
-		<string>voip</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
