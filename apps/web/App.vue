@@ -516,11 +516,11 @@ const resetApp = (forceLanding = false) => {
 
           <div class="mt-16 flex flex-col items-center gap-6">
             <div class="flex items-center gap-8 text-slate-600 font-bold text-[10px] uppercase tracking-[0.2em]">
-              <button @click="showInfo = 'source'" class="hover:text-amber-500 transition-colors">{{ $t('landing.source')
-                }}</button>
               <button @click="showInfo = 'privacy'" class="hover:text-amber-500 transition-colors">{{ $t('landing.privacy')
                 }}</button>
               <button @click="showInfo = 'terms'" class="hover:text-amber-500 transition-colors">{{ $t('landing.terms')
+                }}</button>
+              <button @click="showInfo = 'support'" class="hover:text-amber-500 transition-colors">{{ $t('landing.email')
                 }}</button>
             </div>
 
@@ -793,6 +793,36 @@ const resetApp = (forceLanding = false) => {
             class="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 text-slate-950 font-black rounded-xl uppercase tracking-widest text-[10px] hover:scale-105 transition-transform active:scale-95">
             {{ $t('info.view_github') }}
           </a>
+        </div>
+
+        <div v-else-if="showInfo === 'support'">
+          <div class="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center mb-6">
+            <Info class="w-8 h-8 text-amber-500" />
+          </div>
+          <h3 class="text-2xl font-black uppercase mb-4 tracking-tight text-white">{{ $t('info.support_title') }}</h3>
+          <p class="text-slate-400 text-sm leading-relaxed mb-6">
+            {{ $t('info.support_desc') }}
+          </p>
+          <div class="space-y-4 mb-8 text-sm text-slate-300">
+            <div class="flex items-start gap-3">
+              <div class="w-5 h-5 mt-0.5 flex items-center justify-center bg-slate-800 rounded-full font-bold text-amber-500 text-[10px]">1</div>
+              <span>{{ $t('info.support_item1') }}</span>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="w-5 h-5 mt-0.5 flex items-center justify-center bg-slate-800 rounded-full font-bold text-amber-500 text-[10px]">2</div>
+              <span>{{ $t('info.support_item2') }}</span>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-4">
+            <a href="mailto:mingh.liu@gmail.com" 
+              class="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 text-slate-950 font-black rounded-xl uppercase tracking-widest text-[10px] hover:scale-105 transition-transform active:scale-95">
+              Email Support
+            </a>
+            <a href="https://github.com/MinghuaLiu1977/castnow/issues" target="_blank"
+              class="inline-flex items-center gap-2 px-6 py-3 bg-slate-800 text-white font-black rounded-xl uppercase tracking-widest text-[10px] border border-slate-700 hover:bg-slate-700 transition-all active:scale-95">
+              Github Issues
+            </a>
+          </div>
         </div>
 
         <div v-else-if="showInfo === 'privacy'">

@@ -13,7 +13,8 @@
         "source": "Source",
         "privacy": "Privacy",
         "terms": "Terms",
-        "made_by": "Made by Eastlake Studio"
+        "made_by": "Made by Eastlake Studio",
+        "email": "Support"
     },
     "source_select": {
         "title": "Choose Source",
@@ -78,7 +79,11 @@
         "terms_desc": "By using CastNow, you agree that you are solely responsible for the content you broadcast.",
         "terms_note": "The service is provided 'as is' without warranties of any kind. Misuse of the platform for illegal activities will result in termination of service availability.",
         "close": "Close",
-        "agree_close": "Agree & Close"
+        "agree_close": "Agree & Close",
+        "support_title": "Support & Contact",
+        "support_desc": "Having trouble or have questions? We're here to help. CastNow is a community-driven project dedicated to private P2P communication.",
+        "support_item1": "Email us directly for technical support or feedback.",
+        "support_item2": "Report bugs or request features via our GitHub repository."
     },
     "common": {
         "left": "left",

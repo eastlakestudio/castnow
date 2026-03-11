@@ -13,7 +13,8 @@
         "source": "源码",
         "privacy": "隐私",
         "terms": "条款",
-        "made_by": "由 Eastlake Studio 制作"
+        "made_by": "由 Eastlake Studio 制作",
+        "email": "支持与反馈"
     },
     "source_select": {
         "title": "选择源",
@@ -78,7 +79,11 @@
         "terms_desc": "使用 CastNow，即表示您同意对您广播的内容负全部责任。",
         "terms_note": "本服务按“原样”提供，不提供任何形式的保证。滥用平台进行非法活动将导致服务可用性终止。",
         "close": "关闭",
-        "agree_close": "同意并关闭"
+        "agree_close": "同意并关闭",
+        "support_title": "支持与联系",
+        "support_desc": "遇到问题或有疑问？我们随时为您提供帮助。CastNow 是一个致力于私人 P2P 通信的社区驱动项目。",
+        "support_item1": "直接通过电子邮件联系我们以获取技术支持或反馈。",
+        "support_item2": "通过我们的 GitHub 仓库报告错误或请求功能。"
     },
     "common": {
         "left": "剩余",
