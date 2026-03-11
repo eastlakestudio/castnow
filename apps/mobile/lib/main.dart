@@ -153,6 +153,33 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _restorePurchases() async {
+    try {
+      final bool available = await InAppPurchase.instance.isAvailable();
+      if (!available) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Store not available')),
+          );
+        }
+        return;
+      }
+      await InAppPurchase.instance.restorePurchases();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Restoring purchases...')),
+        );
+      }
+    } catch (e) {
+      debugPrint("Restore error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Restore failed: $e')),
+        );
+      }
+    }
+  }
+
   void _showProDialog() async {
     String price = "---";
     try {
@@ -238,6 +265,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _restorePurchases();
+                },
+                child: const Text(
+                  "Restore Purchases",
+                  style: TextStyle(
+                      color: kPrimaryColor, fontWeight: FontWeight.bold),
                 ),
               ),
               TextButton(
