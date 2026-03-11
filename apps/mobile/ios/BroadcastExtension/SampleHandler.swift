@@ -1,16 +1,10 @@
-//
-//  SampleHandler.swift
-//  BroadcastExtension
-//
-//  Created by Minghua LIu on 2026/1/22.
-//
-
 import ReplayKit
+import VideoToolbox
+import CoreImage
 import Foundation
 
-// MARK: - SocketConnection
 class SocketConnection {
-    var filePath: String?
+    private let filePath: String
     var socketHandle: Int32 = -1
     
     init(filePath: String) {
@@ -18,38 +12,26 @@ class SocketConnection {
     }
     
     func open() -> Bool {
-        guard let filePath = filePath else { return false }
-        
         socketHandle = socket(AF_UNIX, SOCK_STREAM, 0)
         if socketHandle < 0 {
             print("❌ Socket create failed")
             return false
         }
         
+        // Correctly initialize sockaddr_un for Darwin
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
         
-        // Remove existing file if needed (client shouldn't remove, but good to know path nuances)
-        // Here we just connect
-        let pathLen = filePath.utf8.count
-        if pathLen >= 104 { // UNIX_PATH_MAX
-             print("❌ Socket path too long")
-             return false
-        }
-        
         let pathStr = (filePath as NSString).utf8String
         if let pathStr = pathStr {
+            let pathLen = strlen(pathStr)
+            addr.sun_len = UInt8(MemoryLayout<UInt8>.size + MemoryLayout<sa_family_t>.size + Int(pathLen) + 1)
             withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
-                // Bind path safely
                 strlcpy(UnsafeMutableRawPointer(ptr).assumingMemoryBound(to: CChar.self), pathStr, 104)
             }
-        } else {
-            print("❌ Invalid socket path string")
-            return false
         }
         
-        let len = socklen_t(MemoryLayout<sockaddr_un>.size)
-        // We need to cast to generic sockaddr
+        let len = socklen_t(addr.sun_len)
         let connectResult = withUnsafePointer(to: &addr) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                 connect(socketHandle, $0, len)
@@ -58,10 +40,11 @@ class SocketConnection {
         
         if connectResult < 0 {
             print("❌ Socket connect failed: \(String(cString: strerror(errno)))")
+            Darwin.close(socketHandle)
+            socketHandle = -1
             return false
         }
         
-        // Set SIGPIPE to ignore so we don't crash on broken pipe
         var value = 1
         setsockopt(socketHandle, SOL_SOCKET, SO_NOSIGPIPE, &value, socklen_t(MemoryLayout<Int>.size))
         
@@ -99,110 +82,139 @@ class SocketConnection {
     }
 }
 
-// MARK: - SampleHandler
-
 class SampleHandler: RPBroadcastSampleHandler {
     
     private var client: SocketConnection?
-    private var frameCount = 0
+    private let appGroupIdentifier = "group.com.eastlakestudio.castnow.app"
+    private var imageContext = CIContext(options: [
+        CIContextOption.useSoftwareRenderer: false,
+        CIContextOption.priorityRequestLow: true
+    ])
     
-    // IMPORTANT: This must match the App Group ID configured in Xcode
-    private let appGroupIdentifier = "group.com.eastlakestudio.castnow.app" // Replace if different
-    
+    private var lastFrameTime: Int64 = 0
+    private let frameIntervalNs: Int64 = 1_000_000_000 / 15 
+    private var connectionTimer: Timer?
+
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
-        // Path to the socket used by flutter_webrtc
-        // Usually it's in the App Group shared container
+        print("🚀 Broadcast Extension Started")
+        
+        let bundle = Bundle.main
+        let appGroupIdentifier = bundle.object(forInfoDictionaryKey: "RTCAppGroupIdentifier") as? String ?? self.appGroupIdentifier
+        
         guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) else {
-            print("❌ Error: Could not verify App Group container. Check App Group ID.")
-            // We might try a fallback or just fail gracefully
+            print("❌ Error: Could not verify App Group container for identifier: \(appGroupIdentifier)")
+            finishBroadcastWithError(NSError(domain: "SampleHandler", code: 1, userInfo: [NSLocalizedDescriptionKey : "App Group Error: Client is not entitled for \(appGroupIdentifier). Check project settings."]))
             return
         }
         
-        let socketPath = container.appendingPathComponent("rtc_broadcast.socket").path
-        
+        let socketPath = container.appendingPathComponent("rtc_SSFD").path
         client = SocketConnection(filePath: socketPath)
-        if let client = client, client.open() {
-            print("✅ Connected to broadcast socket")
-        } else {
-            print("❌ Failed to connect to broadcast socket")
-            // Retry logic could go here
+        
+        // Retry connection as the host app might be starting the server
+        var connected = false
+        for i in 1...20 { // 20 attempts * 0.3s = 6 seconds
+            if let client = client, client.open() {
+                print("✅ Connected to flutter_webrtc socket on attempt \(i)")
+                connected = true
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        
+        if !connected {
+            print("❌ Failed to connect after all attempts")
+            finishBroadcastWithError(NSError(domain: "SampleHandler", code: 2, userInfo: [NSLocalizedFailureReasonErrorKey : "Handshake Failed: Ensure the Main App is running and Broadcast page is open."]))
+            return
+        }
+        
+        // Start a heartbeat timer to detect if host app disconnects (e.g., user clicked explicit cancel)
+        DispatchQueue.main.async {
+            self.connectionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                self?.checkHostConnection()
+            }
         }
     }
     
-    override func broadcastPaused() {
-        // User has requested to pause the broadcast. Samples will stop being delivered.
+    private func checkHostConnection() {
+        guard let socketHandle = client?.socketHandle, socketHandle >= 0 else { return }
+        var buffer = [UInt8](repeating: 0, count: 1)
+        // MSG_PEEK | MSG_DONTWAIT allows us to check if the socket is closed without reading data
+        let result = recv(socketHandle, &buffer, 1, MSG_PEEK | MSG_DONTWAIT)
+        if result == 0 {
+            // EOF: Host closed the connection
+            print("🛑 Host closed socket connection.")
+            stopGracefully()
+        } else if result < 0 && errno != EAGAIN && errno != EWOULDBLOCK {
+            // Socket error
+            print("🛑 Socket error detected: \(errno)")
+            stopGracefully()
+        }
     }
     
-    override func broadcastResumed() {
-        // User has requested to resume the broadcast. Samples delivery will resume.
+    private func stopGracefully() {
+        connectionTimer?.invalidate()
+        connectionTimer = nil
+        // Using NSLocalizedFailureReasonErrorKey to customize the system alert message
+        let error = NSError(domain: "CastNow", code: 0, userInfo: [NSLocalizedFailureReasonErrorKey: "直播已由宿主应用正常结束"])
+        finishBroadcastWithError(error)
     }
     
     override func broadcastFinished() {
+        print("🛑 Broadcast Finished")
+        connectionTimer?.invalidate()
+        connectionTimer = nil
         client?.close()
         client = nil
     }
     
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
-        guard let client = client else { return }
+        guard let client = client, sampleBufferType == .video else { return }
         
-        switch sampleBufferType {
-        case RPSampleBufferType.video:
-            guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-            
-            // Lock the buffer
-            CVPixelBufferLockBaseAddress(imageBuffer, .readOnly)
-            defer { CVPixelBufferUnlockBaseAddress(imageBuffer, .readOnly) }
-            
-            // Get basic info
-            let width = UInt32(CVPixelBufferGetWidth(imageBuffer))
-            let height = UInt32(CVPixelBufferGetHeight(imageBuffer))
-            let bytesPerRow = UInt32(CVPixelBufferGetBytesPerRow(imageBuffer))
-            
-            // Should be kCVPixelFormatType_32BGRA or 420YpCbCr8BiPlanarVideoRange
-            // We assume the receiver handles raw bytes or we might need to convert.
-            // For simplicity in this raw socket, we break it down.
-            // Protocol:
-            // [Total Size (4 bytes)] [Width (4)] [Height (4)] [Orientation (4)] [Data...]
-            // Check orientation
-            var orientation: UInt32 = 0
-            if let orientationAttachment = CMGetAttachment(sampleBuffer, key: RPVideoSampleOrientationKey as CFString, attachmentModeOut: nil) as? NSNumber {
-                orientation = UInt32(orientationAttachment.intValue)
+        let currentTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).value
+        if currentTime - lastFrameTime < frameIntervalNs && lastFrameTime != 0 {
+            return
+        }
+        lastFrameTime = currentTime
+        
+        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        
+        let width = CVPixelBufferGetWidth(imageBuffer)
+        let height = CVPixelBufferGetHeight(imageBuffer)
+        
+        var orientation: Int = 0
+        if let orientationAttachment = CMGetAttachment(sampleBuffer, key: RPVideoSampleOrientationKey as CFString, attachmentModeOut: nil) as? NSNumber {
+            orientation = orientationAttachment.intValue
+        }
+        
+        let ciImage = CIImage(cvImageBuffer: imageBuffer)
+        guard let jpegData = imageContext.jpegRepresentation(of: ciImage, colorSpace: CGColorSpaceCreateDeviceRGB(), options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.7]) else {
+            return
+        }
+        
+        let header = "HTTP/1.1 200 OK\r\n" +
+                     "Content-Type: image/jpeg\r\n" +
+                     "Buffer-Width: \(width)\r\n" +
+                     "Buffer-Height: \(height)\r\n" +
+                     "Buffer-Orientation: \(orientation)\r\n" +
+                     "Content-Length: \(jpegData.count)\r\n\r\n"
+        
+        guard let headerData = header.data(using: .utf8) else { return }
+        
+        var frameData = Data()
+        frameData.append(headerData)
+        frameData.append(jpegData)
+        
+        let chunkSize = 10 * 1024
+        var offset = 0
+        while offset < frameData.count {
+            let chunkLen = min(chunkSize, frameData.count - offset)
+            let chunk = frameData.subdata(in: offset..<offset+chunkLen)
+            if !client.send(data: chunk) {
+                print("❌ Failed to send frame chunk. Host app likely disconnected.")
+                stopGracefully()
+                break
             }
-            
-            guard let baseAddress = CVPixelBufferGetBaseAddress(imageBuffer) else { return }
-            // Calculate total size: valid data size (height * bytesPerRow)
-            let dataLen = Int(height * bytesPerRow)
-            let totalLen = UInt32(4 + 4 + 4 + 4 + dataLen)
-            
-            // Prepare Header
-            var header = Data(count: 16)
-            header.withUnsafeMutableBytes { ptr in
-                ptr.storeBytes(of: totalLen.bigEndian, toByteOffset: 0, as: UInt32.self)
-                ptr.storeBytes(of: width.bigEndian, toByteOffset: 4, as: UInt32.self)
-                ptr.storeBytes(of: height.bigEndian, toByteOffset: 8, as: UInt32.self)
-                ptr.storeBytes(of: orientation.bigEndian, toByteOffset: 12, as: UInt32.self)
-            }
-            
-            // Send Header
-            if !client.send(data: header) {
-                print("❌ Failed to send header")
-                // Reconnect?
-                return
-            }
-            
-            // Send Body
-            // Direct send from baseAddress to avoid memory copy
-            if !client.send(baseAddress: baseAddress, count: dataLen) {
-                print("❌ Failed to send body")
-                return
-            }
-            
-        case RPSampleBufferType.audioApp:
-            break
-        case RPSampleBufferType.audioMic:
-            break
-        @unknown default:
-            break
+            offset += chunkLen
         }
     }
 }

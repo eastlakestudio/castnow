@@ -23,6 +23,9 @@ import ReplayKit
           if call.method == "triggerPicker" {
               BroadcastPickerManager.shared.trigger()
               result(true)
+          } else if call.method == "hidePicker" {
+              BroadcastPickerManager.shared.hidePicker()
+              result(true)
           } else {
               result(FlutterMethodNotImplemented)
           }
@@ -72,6 +75,34 @@ class BroadcastPickerManager {
             log("✅ Trigger sent")
         } else {
             log("❌ UI Matcher failed")
+        }
+    }
+    
+    func hidePicker() {
+        log("🙈 Attempting to hide picker popup...")
+        DispatchQueue.main.async {
+            var foundPresentedVC = false
+            for scene in UIApplication.shared.connectedScenes {
+                guard let windowScene = scene as? UIWindowScene else { continue }
+                for window in windowScene.windows {
+                    if let rootVC = window.rootViewController {
+                        var topVC = rootVC
+                        while let presentedVC = topVC.presentedViewController {
+                            topVC = presentedVC
+                        }
+                        if topVC != rootVC {
+                            self.log("📢 Dismissing top ViewController on window: \(type(of: topVC))")
+                            topVC.dismiss(animated: true, completion: nil)
+                            foundPresentedVC = true
+                        }
+                    }
+                }
+            }
+            if !foundPresentedVC {
+                self.log("⚠️ No presented ViewController found across any window to dismiss.")
+            } else {
+                self.log("✅ Picker dismissed successfully.")
+            }
         }
     }
 }

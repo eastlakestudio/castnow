@@ -17,5 +17,9 @@
 		<key>RPBroadcastProcessMode</key>
 		<string>RPBroadcastProcessModeSampleBuffer</string>
 	</dict>
+	<key>RTCAppGroupIdentifier</key>
+	<string>group.com.eastlakestudio.castnow.app</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Microphone access is needed for audio streaming during screen sharing.</string>
 </dict>
 </plist>

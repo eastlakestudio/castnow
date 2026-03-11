@@ -28,10 +28,14 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is needed for video streaming.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Microphone access is needed for audio streaming during screen sharing.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Local network access is needed for P2P connections.</string>
 	<key>RTCAppGroupIdentifier</key>
 	<string>group.com.eastlakestudio.castnow.app</string>
+	<key>RTCScreenSharingExtension</key>
+	<string>com.eastlakestudio.castnow.app.BroadcastExtension</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

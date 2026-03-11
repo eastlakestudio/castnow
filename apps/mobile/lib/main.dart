@@ -739,55 +739,12 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   Timer? _limitTimer;
   int _remainingSeconds = 600; // 10 minutes
 
-  // Manual trigger via MethodChannel
-  static const _pickerControlChannel = MethodChannel('castnow_picker_control');
-
-  Future<void> _triggerPicker() async {
-    try {
-      if (Platform.isIOS) {
-        final deviceInfo = DeviceInfoPlugin();
-        final iosInfo = await deviceInfo.iosInfo;
-        if (!iosInfo.isPhysicalDevice) {
-          if (mounted) {
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text("⚠️ 模拟器限制"),
-                content: const Text(
-                    "你当前正在使用 iOS 模拟器。\n\n苹果系统规定：模拟器不支持 ReplayKit 录屏功能，点击不会弹出菜单。\n\n请切换到【真机】进行测试。"),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text("确认"))
-                ],
-              ),
-            );
-          }
-          return;
-        }
-      }
-
-      debugPrint("📢 Manually triggering broadcast picker via native...");
-      final bool? success =
-          await _pickerControlChannel.invokeMethod<bool>('triggerPicker');
-      debugPrint("✅ Trigger success: $success");
-    } catch (e) {
-      debugPrint("❌ Error triggering picker: $e");
-    }
-  }
 
   @override
   void initState() {
     super.initState();
     _initRenderer();
     WakelockPlus.enable();
-
-    // Listen for logs from native code
-    _pickerControlChannel.setMethodCallHandler((call) async {
-      if (call.method == "nativeLog") {
-        debugPrint("🍎 NATIVE: ${call.arguments}");
-      }
-    });
   }
 
   Future<void> _initRenderer() async {
@@ -798,7 +755,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     if (Platform.isAndroid) {
       const channel = MethodChannel('media_projection');
       channel.setMethodCallHandler((call) async {
-        debugPrint("📢 Received MethodChannel call: ${call.method}");
+        if (kDebugMode) {
+          debugPrint("📱 MethodChannel Info: ${call.method}");
+        }
         if (call.method == "onStopPressed") {
           debugPrint("🛑 Native STOP signal received. Navigating back.");
           _stopBroadcast();
@@ -811,15 +770,20 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   bool _isStopping = false;
 
-  void _stopBroadcast() {
-    if (!mounted || _isStopping) return;
-    _isStopping = true;
+  Future<void> _handleExit() async {
+    await _stopBroadcast();
+  }
 
-    // 1. Close Peer & Connections
+  Future<void> _stopBroadcast() async {
+    if (!mounted) return;
+    if (!_isStopping) {
+      setState(() => _isStopping = true);
+    }
+
+    // 1. Close Peer & Connections (This triggers native socket closure immediately)
     _peer?.dispose();
     _peer = null;
 
-    // 2. Stop Service (Native notification)
     // 2. Stop Service (Native notification)
     if (Platform.isAndroid) {
       const MethodChannel('media_projection')
@@ -830,6 +794,12 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     _localStream?.dispose();
     _localStream = null;
     _localRenderer.srcObject = null;
+
+    // 4. Wait for iOS system popup to appear within this context before popping Nav
+    if (_isScreenSharing && Platform.isIOS) {
+      // User requested 4.5s delay to ensure the system popup is masked while on this screen
+      await Future.delayed(const Duration(milliseconds: 4500));
+    }
 
     if (mounted) {
       if (Navigator.canPop(context)) {
@@ -874,7 +844,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               // Starting Foreground Service immediately can crash (Background Service Start Restriction).
               // Wait for 1s to ensure App is recognized as "Foreground" and permission is synced.
               if (status.isGranted) {
-                debugPrint(
+                if (kDebugMode) debugPrint(
                     "✅ Notification permission granted. Waiting for system sync...");
                 await Future.delayed(const Duration(milliseconds: 500));
               }
@@ -883,7 +853,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             // 🛑 核心拦截点 🛑
             // 如果此时还是没授权（可能是用户拒绝，也可能是 manifest 缓存问题）
             if (!status.isGranted) {
-              debugPrint("❌ 致命错误：没有通知权限，前台服务无法启动！");
+              if (kDebugMode) debugPrint("❌ 致命错误：没有通知权限，前台服务无法启动！");
 
               if (mounted) {
                 showDialog(
@@ -917,7 +887,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
           // 1. Start Media Projection Service
           // The native code will handle the Android 14 bridge/polling automatically.
-          debugPrint("🚀 Starting media projection service...");
+          if (kDebugMode) debugPrint("🚀 Starting media projection service...");
           await channel.invokeMethod('startMediaProjectionService', {
             'type': 'mediaProjection',
             'code': code,
@@ -926,35 +896,35 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           //await Future.delayed(const Duration(milliseconds: 1500));
 
           // 2. Request Screen Capture (Plugin's native prompt)
-          debugPrint("📸 Requesting screen capture permission...");
+          if (kDebugMode) debugPrint("📸 Requesting screen capture permission...");
           _localStream =
               await navigator.mediaDevices.getDisplayMedia({'audio': false});
-          debugPrint("✅ Screen capture stream acquired successfully.");
+          if (kDebugMode) debugPrint("✅ Screen capture stream acquired successfully.");
 
           // 3. Listen for "Stop" from System UI
           // When user clicks "Stop sharing" in notification panel, this fires.
           var videoTrack = _localStream!.getVideoTracks()[0];
           videoTrack.onEnded = () {
-            debugPrint("📷 MEDIA TRACK ENDED: System 'Stop' button clicked.");
+            if (kDebugMode) debugPrint("📷 MEDIA TRACK ENDED: System 'Stop' button clicked.");
             _stopBroadcast();
           };
 
           videoTrack.onMute = () {
-            debugPrint(
+            if (kDebugMode) debugPrint(
                 "🔇 MEDIA TRACK MUTED: Stream paused or stopped sending frames.");
             // Optional: If muted for extensive time, could treat as stop.
           };
 
           // 4. Listen for track removal (common in some implementations)
           _localStream!.onRemoveTrack = (track) {
-            debugPrint("👋 TRACK REMOVED from stream. Triggering termination.");
+            if (kDebugMode) debugPrint("👋 TRACK REMOVED from stream. Triggering termination.");
             _stopBroadcast();
           };
 
           // --- Session Lifecycle: Detect system stop ---
           for (var track in _localStream!.getTracks()) {
             track.onEnded = () {
-              debugPrint(
+              if (kDebugMode) debugPrint(
                   "🎥 [${track.kind}] system signal: track.onEnded triggered.");
               _stopBroadcast();
             };
@@ -964,7 +934,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           final deviceInfo = DeviceInfoPlugin();
           final iosInfo = await deviceInfo.iosInfo;
           if (!iosInfo.isPhysicalDevice) {
-            debugPrint("❌ Environment Error: Simulator detected.");
+            if (kDebugMode) debugPrint("❌ Environment Error: Simulator detected.");
             ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text("iOS 模拟器不支持录屏，请使用真机")));
             setState(() => _isLoading = false);
@@ -972,12 +942,12 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           }
 
           // 1. First, Request Microphone permission
-          debugPrint("🎤 Step 1: Requesting Microphone permission...");
+          if (kDebugMode) debugPrint("🎤 Step 1: Requesting Microphone permission...");
           await Permission.microphone.request();
 
           // 2. Second, Request Screen Capture via getDisplayMedia
           // This starts the socket server in the helper extension architecture.
-          debugPrint(
+          if (kDebugMode) debugPrint(
               "📸 Step 2: Starting socket server (deviceId: broadcast)...");
           _localStream = await navigator.mediaDevices.getDisplayMedia({
             'video': {
@@ -985,12 +955,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             },
             'audio': false
           });
-          debugPrint(
+          if (kDebugMode) debugPrint(
               "✅ iOS Screen Capture stream prepared. Stream ID: ${_localStream?.id}");
+
+          // (Removed manual triggerPicker here since flutter_webrtc natively triggers RPSystemBroadcastPickerView on iOS 14+)
 
           // 3. Signal user to pick
           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("服务已就绪，请点击下方按钮启动录屏")));
+              const SnackBar(content: Text("正在唤起录屏授权...")));
 
           setState(() => _isLoading = false);
         }
@@ -1055,7 +1027,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
       setState(() {});
     } catch (e) {
-      debugPrint("Error starting broadcast: $e");
+      if (kDebugMode) debugPrint("Error starting broadcast: $e");
 
       // Attempt to clean up native service if it was started
       try {
@@ -1082,7 +1054,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text("Error: $e")));
         } else {
-          debugPrint(
+          if (kDebugMode) debugPrint(
               "User cancelled or denied permission. Returning to selection.");
         }
       }
@@ -1095,7 +1067,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       if (tracks.isNotEmpty) {
         await Helper.switchCamera(tracks.first);
       } else {
-        debugPrint("❌ No video tracks found to switch.");
+        if (kDebugMode) debugPrint("❌ No video tracks found to switch.");
       }
     }
   }
@@ -1113,7 +1085,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                _stopBroadcast();
+                _handleExit();
               },
               child: const Text("CLOSE"))
         ],
@@ -1123,9 +1095,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   @override
   void dispose() {
-    debugPrint("🧹 Disposing BroadcastScreenState");
+    if (kDebugMode) debugPrint("🧹 Disposing BroadcastScreenState");
     _limitTimer?.cancel();
-    _stopBroadcast();
+    if (!_isStopping && _peer != null) {
+      _stopBroadcast();
+    }
     WakelockPlus.disable();
     super.dispose();
   }
@@ -1244,7 +1218,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                             ]),
                           ),
                           IconButton(
-                              onPressed: () => Navigator.pop(context),
+                              onPressed: () => _handleExit(),
                               icon:
                                   const Icon(Icons.close, color: Colors.white))
                         ],
@@ -1253,38 +1227,31 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
                     const SizedBox(height: 20),
 
-                    // Constrained Video Preview
+                    // Constrained Video Preview (Enlarged and Dynamic Aspect)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: isLandscape ? 400 : double.infinity,
-                          maxHeight: isLandscape ? 200 : 300,
+                      child: Container(
+                        width: isLandscape ? 400 : double.infinity,
+                        height: MediaQuery.of(context).size.height * 0.45,
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: Colors.white10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.5),
+                              blurRadius: 20,
+                              spreadRadius: 5,
+                            )
+                          ],
                         ),
-                        child: AspectRatio(
-                          aspectRatio: 16 / 9,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black,
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: Colors.white10),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.5),
-                                  blurRadius: 20,
-                                  spreadRadius: 5,
-                                )
-                              ],
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: _localStream != null
-                                ? RTCVideoView(_localRenderer,
-                                    mirror: !_isScreenSharing,
-                                    objectFit: RTCVideoViewObjectFit
-                                        .RTCVideoViewObjectFitContain)
-                                : Container(),
-                          ),
-                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: _localStream != null
+                            ? RTCVideoView(_localRenderer,
+                                mirror: !_isScreenSharing,
+                                objectFit: RTCVideoViewObjectFit
+                                    .RTCVideoViewObjectFitContain)
+                            : Container(),
                       ),
                     ),
 
@@ -1306,7 +1273,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                             const Text("SHARING ACCESS KEY",
                                 style: TextStyle(
                                     color: kTextSecondary,
-                                    fontSize: 10,
                                     letterSpacing: 2,
                                     fontWeight: FontWeight.bold)),
                             const SizedBox(height: 4),
@@ -1352,46 +1318,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                                       ))
                                   .toList(),
                             ),
-                            if (_isScreenSharing && Platform.isIOS) ...[
-                              const SizedBox(height: 16),
-                              // 1. The visible but possibly non-clickable native icon (for system linkage)
-                              const IOSBroadcastPicker(
-                                width: 80,
-                                height: 80,
-                              ),
-                              const SizedBox(height: 12),
-                              // 2. The large, reliable Flutter button as requested by user
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: _triggerPicker,
-                                  icon: const Icon(Icons.touch_app_rounded,
-                                      color: Colors.white),
-                                  label: const Text("TAP TO START BROADCAST",
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                          letterSpacing: 1)),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: kPrimaryColor,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 18),
-                                    shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        side: const BorderSide(
-                                            color: Colors.white24)),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                "If popup doesn't appear, ensure Screen Recording is allowed in Settings",
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    color: Colors.white38, fontSize: 10),
-                              ),
-                            ],
                             const SizedBox(height: 20),
                             if (!_isScreenSharing)
                               TextButton.icon(
@@ -1405,7 +1331,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                             SizedBox(
                               width: double.infinity,
                               child: TextButton.icon(
-                                onPressed: _stopBroadcast,
+                                onPressed: _handleExit,
                                 icon: const Icon(Icons.close_rounded,
                                     color: Colors.white54),
                                 label: const Text("CANCEL / TERMINATE",
@@ -1419,16 +1345,30 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                           ],
                         ),
                       ),
+                    const SizedBox(height: 20),
+
+                    // Native Picker removed since flutter_webrtc plugin handles it natively
+
                     const SizedBox(height: 40),
                   ],
                 ),
               ),
             ),
-            if (_isLoading)
+            if (_isLoading || _isStopping)
               Container(
                   color: Colors.black87,
-                  child: const Center(
-                      child: CircularProgressIndicator(color: kPrimaryColor))),
+                  child: Center(
+                      child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(color: kPrimaryColor),
+                      if (_isStopping) ...[
+                        const SizedBox(height: 16),
+                        const Text("正在结束直播...",
+                            style: TextStyle(color: Colors.white, fontSize: 16)),
+                      ]
+                    ],
+                  ))),
           ],
         ),
       ),
@@ -1518,36 +1458,36 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     _peer = peer;
 
     peer.on("open").listen((id) {
+      if (kDebugMode) debugPrint("[Signaling] Connected to server: $id");
       final conn = peer.connect(code);
 
       conn.on("open").listen((_) {
-        debugPrint("Connected to broadcaster signaling");
+        if (kDebugMode) debugPrint("[Signaling] Connected to broadcaster signaling");
       });
 
       conn.on("close").listen((_) {
+        if (kDebugMode) debugPrint("[Signaling] Disconnected from server.");
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text("Broadcast ended")));
-          Navigator.pop(context);
+          _showEndedDialog();
         }
       });
     });
 
     peer.on("call").listen((mediaConnection) async {
-      debugPrint("Received call from ${mediaConnection.peer}");
+      if (kDebugMode) debugPrint("Received call from ${mediaConnection.peer}");
 
       // --- WebRTC Debug Logs ---
       mediaConnection.peerConnection?.onIceConnectionState =
           (RTCIceConnectionState state) {
-        debugPrint("🔥 [手机端 ICE 状态]: ${state.toString()}");
+        if (kDebugMode) debugPrint("🔥 [手机端 ICE 状态]: ${state.toString()}");
         if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
-          debugPrint("❌ 警告：打洞失败，请检查代理设置或 STUN/TURN 服务器");
+          if (kDebugMode) debugPrint("❌ 警告：打洞失败，请检查代理设置或 STUN/TURN 服务器");
         }
       };
 
       mediaConnection.peerConnection?.onIceCandidate =
           (RTCIceCandidate candidate) {
-        debugPrint("🏠 [手机端候选地址]: ${candidate.candidate}");
+        if (kDebugMode) debugPrint("🏠 [手机端候选地址]: ${candidate.candidate}");
       };
 
       // Answer the call. peerdart explicitly requires a non-null MediaStream.
@@ -1560,16 +1500,16 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         dummyStream = await navigator.mediaDevices
             .getUserMedia({'audio': true, 'video': false});
       } catch (e) {
-        debugPrint("Error creating dummy stream: $e");
+        if (kDebugMode) debugPrint("Error creating dummy stream: $e");
         return;
       }
 
       mediaConnection.answer(dummyStream);
       mediaConnection.on("stream").listen((stream) {
-        debugPrint("Received remote stream: ${stream.id}");
-        debugPrint("Video tracks: ${stream.getVideoTracks().length}");
+        if (kDebugMode) debugPrint("Received remote stream: ${stream.id}");
+        if (kDebugMode) debugPrint("Video tracks: ${stream.getVideoTracks().length}");
         if (stream.getVideoTracks().isNotEmpty) {
-          debugPrint(
+          if (kDebugMode) debugPrint(
               "Video track enabled: ${stream.getVideoTracks().first.enabled}");
         }
 
@@ -1581,7 +1521,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       });
 
       mediaConnection.on("close").listen((_) {
-        debugPrint("Media connection closed");
+        if (kDebugMode) debugPrint("Media connection closed");
         setState(() {
           _isConnected = false;
           _remoteRenderer.srcObject = null;
@@ -1589,18 +1529,185 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       });
 
       mediaConnection.on("error").listen((e) {
-        debugPrint("Media connection error: $e");
+        if (kDebugMode) debugPrint("Media connection error: $e");
       });
     });
 
     peer.on("error").listen((err) {
-      debugPrint("Peer Error: $err");
+      if (kDebugMode) debugPrint("Peer Error: $err");
       if (mounted) {
         setState(() => _isConnecting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Connection Failed. Check code.")));
+        _showErrorDialog("Connection Failed. Check your access key.");
       }
     });
+  }
+
+  void _showEndedDialog() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          decoration: BoxDecoration(
+            color: kSurfaceColor,
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.white10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.5),
+                blurRadius: 30,
+                spreadRadius: 10,
+              )
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.videocam_off_rounded,
+                    color: kPrimaryColor, size: 48),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                "Broadcast Ended",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                "The presenter has stop sharing their screen.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: kTextSecondary,
+                  fontSize: 14,
+                  height: 1.5,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop(); // Close dialog
+                    Navigator.of(context).pop(); // Exit screen
+                  },
+                  style: TextButton.styleFrom(
+                    backgroundColor: kPrimaryColor,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    "BACK TO HOME",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showErrorDialog(String message) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          decoration: BoxDecoration(
+            color: kSurfaceColor,
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.red.withOpacity(0.2)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.5),
+                blurRadius: 30,
+                spreadRadius: 10,
+              )
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.05),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.error_outline_rounded,
+                    color: Colors.redAccent, size: 48),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                "Connection Error",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: kTextSecondary,
+                  fontSize: 14,
+                  height: 1.5,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.white10,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    "OK",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -1643,73 +1750,73 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 minHeight: MediaQuery.of(context).size.height -
                     AppBar().preferredSize.height -
                     MediaQuery.of(context).padding.top),
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 32),
-                    const Text("ENTER ACCESS KEY",
-                        style: TextStyle(
-                            color: kTextSecondary,
-                            letterSpacing: 3,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 24),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 400),
-                      child: TextField(
-                        controller: _codeController,
-                        textAlign: TextAlign.center,
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
-                        style: TextStyle(
-                            fontSize: isLandscape ? 32 : 48,
-                            fontWeight: FontWeight.w900,
-                            color: kPrimaryColor,
-                            letterSpacing: isLandscape ? 4 : 8),
-                        decoration: InputDecoration(
-                          counterText: "",
-                          filled: true,
-                          fillColor: kSurfaceColor,
-                          contentPadding: EdgeInsets.symmetric(
-                              vertical: isLandscape ? 12 : 24),
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide.none),
-                          hintText: "000000",
-                          hintStyle:
-                              TextStyle(color: kSurfaceColor.withBlue(40)),
-                        ),
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(height: isLandscape ? 20 : 100), // Offset from top
+                  const Text("ENTER ACCESS KEY",
+                      style: TextStyle(
+                          color: kTextSecondary,
+                          letterSpacing: 3,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 24),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 400),
+                    child: TextField(
+                      controller: _codeController,
+                      textAlign: TextAlign.center,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      style: TextStyle(
+                          fontSize: isLandscape ? 32 : 48,
+                          fontWeight: FontWeight.w900,
+                          color: kPrimaryColor,
+                          letterSpacing: isLandscape ? 4 : 8),
+                      decoration: InputDecoration(
+                        counterText: "",
+                        filled: true,
+                        fillColor: kSurfaceColor,
+                        contentPadding: EdgeInsets.symmetric(
+                            vertical: isLandscape ? 12 : 24),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none),
+                        hintText: "000000",
+                        hintStyle:
+                            TextStyle(color: kSurfaceColor.withBlue(40)),
                       ),
                     ),
-                    const SizedBox(height: 40),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 400),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 60,
-                        child: ElevatedButton(
-                          onPressed: _isConnecting ? null : _joinStream,
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: kPrimaryColor,
-                              foregroundColor: Colors.black,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16))),
-                          child: _isConnecting
-                              ? const CircularProgressIndicator(
-                                  color: Colors.black)
-                              : const Text("CONNECT NOW",
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 16,
-                                      letterSpacing: 1)),
-                        ),
+                  ),
+                  const SizedBox(height: 40),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 400),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 60,
+                      child: ElevatedButton(
+                        onPressed: _isConnecting ? null : _joinStream,
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: kPrimaryColor,
+                            foregroundColor: Colors.black,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16))),
+                        child: _isConnecting
+                            ? const CircularProgressIndicator(
+                                color: Colors.black)
+                            : const Text("CONNECT NOW",
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                    letterSpacing: 1)),
                       ),
-                    )
-                  ],
-                ),
+                    ),
+                  ),
+                  const SizedBox(height: 100), // Bottom padding to ensure scrollability if needed
+                ],
               ),
             ),
           ),
