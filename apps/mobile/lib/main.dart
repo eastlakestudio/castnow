@@ -2159,7 +2159,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        const SizedBox(height: 80),
+                        const SizedBox(height: 40),
                         const Text("ENTER ACCESS KEY",
                             style: TextStyle(
                                 color: kTextSecondary,
@@ -2218,7 +2218,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 100),
+                        const SizedBox(height: 200),
                       ],
                     ),
             ),
