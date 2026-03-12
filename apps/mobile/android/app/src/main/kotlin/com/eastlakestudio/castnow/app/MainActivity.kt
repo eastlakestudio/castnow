@@ -1,4 +1,4 @@
-package com.castnow.app
+package com.eastlakestudio.castnow.app
 
 import android.content.Context
 import android.content.Intent
@@ -17,7 +17,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity(), DisplayListener {
 
-    private val PROJECTION_CHANNEL = "media_projection"
+    private val PROJECTION_CHANNEL = "castnow_picker"
     private var methodChannel: MethodChannel? = null
     private var castCode: String? = null
 
@@ -25,7 +25,7 @@ class MainActivity : FlutterActivity(), DisplayListener {
     private val stopReceiver =
             object : android.content.BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
-                    if (intent?.action == "com.castnow.app.STOP_SESSION") {
+                    if (intent?.action == "com.eastlakestudio.castnow.app.STOP_SESSION") {
                         Log.d(
                                 "CastNow",
                                 "MainActivity: Stop broadcast received. Sycing with Flutter."
@@ -45,7 +45,7 @@ class MainActivity : FlutterActivity(), DisplayListener {
         displayManager.registerDisplayListener(this, Handler(Looper.getMainLooper()))
 
         // Register receiver for Android 14 compatibility
-        val filter = IntentFilter("com.castnow.app.STOP_SESSION")
+        val filter = IntentFilter("com.eastlakestudio.castnow.app.STOP_SESSION")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(stopReceiver, filter, Context.RECEIVER_EXPORTED)
         } else {

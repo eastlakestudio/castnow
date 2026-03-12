@@ -48,6 +48,7 @@ const peerInstance = ref(null);
 const localStream = ref(null);
 const localVideo = ref(null);
 const activeConnections = ref([]);
+const isMicMuted = ref(false);
 
 // Receiver Refs
 const joinCode = ref("");
@@ -369,6 +370,15 @@ const toggleMute = () => {
   }
 };
 
+const toggleMic = () => {
+  if (localStream.value) {
+    isMicMuted.value = !isMicMuted.value;
+    localStream.value.getAudioTracks().forEach((track) => {
+      track.enabled = !isMicMuted.value;
+    });
+  }
+};
+
 const toggleFullscreen = () => {
   if (!document.fullscreenElement && remoteVideo.value) {
     remoteVideo.value.parentElement
@@ -594,13 +604,22 @@ const resetApp = (forceLanding = false) => {
                 <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">{{ $t('sender.active_tunnel')
                   }}</span>
               </div>
-              <button v-if="castingMode === 'camera'" @click="toggleCamera"
-                class="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-full hover:bg-amber-500 hover:text-slate-950 transition-all">
-                <Repeat class="w-3 h-3" />
-                <span class="text-[10px] font-black uppercase">{{
-                  facingMode === "user" ? $t('sender.front') : $t('sender.back')
-                  }}</span>
-              </button>
+              <div class="flex items-center gap-2">
+                <button @click="toggleMic"
+                  class="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-full hover:bg-amber-500 hover:text-slate-950 transition-all"
+                  :class="{ 'bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white': isMicMuted }">
+                  <component :is="isMicMuted ? VolumeX : Volume2" class="w-3 h-3" />
+                  <span class="text-[10px] font-black uppercase">{{ isMicMuted ? $t('sender.muted') : $t('sender.mic_on')
+                    }}</span>
+                </button>
+                <button v-if="castingMode === 'camera'" @click="toggleCamera"
+                  class="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-full hover:bg-amber-500 hover:text-slate-950 transition-all">
+                  <Repeat class="w-3 h-3" />
+                  <span class="text-[10px] font-black uppercase">{{
+                    facingMode === "user" ? $t('sender.front') : $t('sender.back')
+                    }}</span>
+                </button>
+              </div>
             </div>
 
             <div class="mb-10">

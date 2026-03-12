@@ -128,9 +128,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final bool available = await InAppPurchase.instance.isAvailable();
       if (!available) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Store not available')),
-          );
+          _showErrorDialog("Google Play Store is not available on this device.");
         }
         return;
       }
@@ -158,9 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final bool available = await InAppPurchase.instance.isAvailable();
       if (!available) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Store not available')),
-          );
+          _showErrorDialog("Google Play Store is not available.");
         }
         return;
       }
@@ -191,13 +187,15 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
 
     if (!mounted) return;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     showDialog(
       context: context,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
         child: Container(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(isLandscape ? 16 : 24),
           decoration: BoxDecoration(
             color: const Color(0xFF0F172A),
             borderRadius: BorderRadius.circular(28),
@@ -210,99 +208,105 @@ class _HomeScreenState extends State<HomeScreen> {
               )
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: kPrimaryColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.auto_awesome_rounded,
-                    color: kPrimaryColor, size: 40),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                "Upgrade to Pro",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                "Unlock all features and enjoy seamless screen sharing experience.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: kTextSecondary, fontSize: 14),
-              ),
-              const SizedBox(height: 24),
-              _buildProFeature(Icons.timer_off_rounded, "Unlimited Casting Time"),
-              _buildProFeature(Icons.bolt_rounded, "Faster Connection"),
-              _buildProFeature(Icons.hd_rounded, "High Definition Quality"),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _buyPro();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimaryColor,
-                    foregroundColor: Colors.black,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(isLandscape ? 12 : 16),
+                    decoration: BoxDecoration(
+                      color: kPrimaryColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
                     ),
+                    child: Icon(Icons.auto_awesome_rounded,
+                        color: kPrimaryColor, size: isLandscape ? 32 : 40),
                   ),
-                  child: Text(
-                    "Unlock for $price",
-                    style: const TextStyle(
-                      fontSize: 16,
+                  SizedBox(height: isLandscape ? 12 : 20),
+                  const Text(
+                    "Upgrade to Pro",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
+                  SizedBox(height: isLandscape ? 8 : 12),
+                  const Text(
+                    "Unlock all features and enjoy seamless screen sharing experience.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: kTextSecondary, fontSize: 14),
+                  ),
+                  SizedBox(height: isLandscape ? 16 : 24),
+                  _buildProFeature(
+                      Icons.timer_off_rounded, "Unlimited Casting Time", isLandscape),
+                  _buildProFeature(Icons.bolt_rounded, "Faster Connection", isLandscape),
+                  _buildProFeature(Icons.hd_rounded, "High Definition Quality", isLandscape),
+                  SizedBox(height: isLandscape ? 16 : 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: isLandscape ? 48 : 56,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _buyPro();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kPrimaryColor,
+                        foregroundColor: Colors.black,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: Text(
+                        "Unlock for $price",
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: isLandscape ? 4 : 12),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _restorePurchases();
+                    },
+                    child: const Text(
+                      "Restore Purchases",
+                      style: TextStyle(
+                          color: kPrimaryColor, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (!isLandscape)
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text(
+                      "Later",
+                      style: TextStyle(color: kTextSecondary),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _restorePurchases();
-                },
-                child: const Text(
-                  "Restore Purchases",
-                  style: TextStyle(
-                      color: kPrimaryColor, fontWeight: FontWeight.bold),
-                ),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  "Later",
-                  style: TextStyle(color: kTextSecondary),
-                ),
-              ),
-            ],
-          ),
+            ),
         ),
       ),
     );
   }
 
-  Widget _buildProFeature(IconData icon, String text) {
+  Widget _buildProFeature(IconData icon, String text, [bool isLandscape = false]) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.symmetric(vertical: isLandscape ? 4 : 8),
       child: Row(
         children: [
-          Icon(icon, color: kPrimaryColor, size: 20),
+          Icon(icon, color: kPrimaryColor, size: isLandscape ? 18 : 20),
           const SizedBox(width: 12),
-          Text(
-            text,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: Colors.white, fontSize: isLandscape ? 13 : 14),
+            ),
           ),
         ],
       ),
@@ -354,6 +358,88 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showErrorDialog(String message) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          decoration: BoxDecoration(
+            color: kSurfaceColor,
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.red.withOpacity(0.2)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.5),
+                blurRadius: 30,
+                spreadRadius: 10,
+              )
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.05),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.error_outline_rounded,
+                    color: Colors.redAccent, size: 48),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                "Purchase Error",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: kTextSecondary,
+                  fontSize: 14,
+                  height: 1.5,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.white10,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    "OK",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final orientation = MediaQuery.of(context).orientation;
@@ -389,7 +475,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
         // Logo Area
         Container(
           width: isLandscape ? 60 : 80,
@@ -412,7 +498,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Icon(Icons.bolt_rounded,
               color: kPrimaryColor, size: isLandscape ? 36 : 48),
         ),
-        SizedBox(height: isLandscape ? 12 : 24),
+        SizedBox(height: isLandscape ? 8 : 20),
         RichText(
           text: const TextSpan(
             style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900),
@@ -600,7 +686,7 @@ class _HomeScreenState extends State<HomeScreen> {
           // Refined Top-Right PRO Badge / Status
           Positioned(
             top: MediaQuery.of(context).padding.top + 12,
-            right: 20,
+            left: 20,
             child: GestureDetector(
               onTap: _isPro ? null : _showProDialog,
               child: Container(
@@ -772,6 +858,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   String? _peerId;
   bool _isScreenSharing = false;
   final List<DataConnection> _connections = [];
+  bool _isMuted = false;
   bool _isLoading = false;
 
   // Time Limit Logic
@@ -792,7 +879,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     // Listen for native stop signal (from notification)
     // Listen for native stop signal (from notification)
     if (Platform.isAndroid) {
-      const channel = MethodChannel('media_projection');
+      const channel = MethodChannel('castnow_picker');
       channel.setMethodCallHandler((call) async {
         if (kDebugMode) {
           debugPrint("📱 MethodChannel Info: ${call.method}");
@@ -807,7 +894,29 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     if (mounted) setState(() {});
   }
 
+  // Shared ICE configuration for P2P traversal
+  Map<String, dynamic> _getIceServerConfig() {
+    return {
+      'iceServers': [
+        {'urls': 'stun:stun.l.google.com:19302'},
+        {'urls': 'stun:stun.cloudflare.com:3478'},
+        {'urls': 'stun:stun.miwifi.com:3478'},
+        {'urls': 'stun:stun.cdn.aliyun.com:3478'},
+      ]
+    };
+  }
+
   bool _isStopping = false;
+
+  void _toggleMute() {
+    if (_localStream == null) return;
+    setState(() {
+      _isMuted = !_isMuted;
+      for (var track in _localStream!.getAudioTracks()) {
+        track.enabled = !_isMuted;
+      }
+    });
+  }
 
   Future<void> _handleExit() async {
     await _stopBroadcast();
@@ -825,7 +934,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
     // 2. Stop Service (Native notification)
     if (Platform.isAndroid) {
-      const MethodChannel('media_projection')
+      const MethodChannel('castnow_picker')
           .invokeMethod('stopMediaProjectionService');
     }
 
@@ -1018,8 +1127,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       _localRenderer.srcObject = _localStream;
       _isScreenSharing = isScreen;
 
-      // 3. Initialize Peer AFTER stream is acquired
-      final peer = Peer(id: code, options: PeerOptions(debug: LogLevel.All));
+      // 3. Initialize Peer AFTER stream is acquired with robust ICE config
+      final peer = Peer(
+          id: code,
+          options:
+              PeerOptions(debug: LogLevel.All, config: _getIceServerConfig()));
       _peer = peer;
 
       // 3. Setup signaling
@@ -1035,13 +1147,23 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         _connections.add(conn);
         // Auto-minimize app after receiver connects (Android Screen Share only)
         if (_isScreenSharing && !kIsWeb && Platform.isAndroid) {
-          const channel0 = MethodChannel('media_projection');
+          const channel0 = MethodChannel('castnow_picker');
           channel0.invokeMethod('minimizeApp');
         }
 
         // Active call to receiver
         if (_localStream != null) {
-          _peer!.call(conn.peer, _localStream!);
+          final mediaConnection = _peer!.call(conn.peer, _localStream!);
+
+          // --- ICE Debug Logs ---
+          mediaConnection.peerConnection?.onIceConnectionState =
+              (RTCIceConnectionState state) {
+            if (kDebugMode) debugPrint("🔥 [发送端 ICE 状态]: ${state.toString()}");
+          };
+          mediaConnection.peerConnection?.onIceCandidate =
+              (RTCIceCandidate candidate) {
+            if (kDebugMode) debugPrint("🏠 [发送端候选地址]: ${candidate.candidate}");
+          };
         }
       });
 
@@ -1113,21 +1235,97 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   void _showTimeUpDialog() {
     if (!mounted) return;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Time Limit Reached"),
-        content: const Text(
-            "Free version is limited to 10 minutes per session.\n\nPlease upgrade to PRO for unlimited casting."),
-        actions: [
-          TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _handleExit();
-              },
-              child: const Text("CLOSE"))
-        ],
+      builder: (ctx) => Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+          constraints: const BoxConstraints(maxWidth: 450),
+          decoration: BoxDecoration(
+            color: kSurfaceColor,
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.white10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.5),
+                blurRadius: 30,
+                spreadRadius: 10,
+              )
+            ],
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: isLandscape ? 24 : 32,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.05),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.timer_off_rounded,
+                        color: Colors.orangeAccent, size: isLandscape ? 36 : 48),
+                  ),
+                  SizedBox(height: isLandscape ? 16 : 24),
+                  const Text(
+                    "Time Limit Reached",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    "Free version is limited to 10 minutes per session.\n\nPlease upgrade to PRO for unlimited casting.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: kTextSecondary,
+                      fontSize: 14,
+                      height: 1.5,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  SizedBox(height: isLandscape ? 24 : 32),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _handleExit();
+                      },
+                      style: TextButton.styleFrom(
+                        backgroundColor: kPrimaryColor,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        "CLOSE",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1213,51 +1411,71 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                     // Header
                     Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 10),
+                          horizontal: 16, vertical: 8),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(20)),
-                            child: Row(children: [
-                              Icon(Icons.circle,
-                                  color: _isScreenSharing
-                                      ? Colors.blue
-                                      : Colors.red,
-                                  size: 12),
-                              const SizedBox(width: 8),
-                              Text(
-                                  _isScreenSharing
-                                      ? "SHARING SCREEN"
-                                      : "ON AIR",
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12)),
-                              if (!widget.isPro) ...[
-                                const SizedBox(width: 12),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                      color: Colors.white24,
-                                      borderRadius: BorderRadius.circular(8)),
-                                  child: Text(
-                                    "${(_remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}",
-                                    style: const TextStyle(
-                                        fontFamily: 'monospace',
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold),
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(15)),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.circle,
+                                      color: _isScreenSharing
+                                          ? Colors.blue
+                                          : Colors.red,
+                                      size: 10),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                        _isScreenSharing ? "SHARING" : "ON AIR",
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11)),
                                   ),
-                                ),
-                              ],
-                            ]),
+                                  if (!widget.isPro) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                          color: Colors.white24,
+                                          borderRadius:
+                                              BorderRadius.circular(6)),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text("TRIAL:",
+                                              style: TextStyle(
+                                                  color: Colors.white54,
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.bold)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            "${(_remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}",
+                                            style: const TextStyle(
+                                                fontFamily: 'monospace',
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
                           ),
                           IconButton(
                               onPressed: () => _handleExit(),
+                              constraints: const BoxConstraints(),
+                              padding: EdgeInsets.zero,
                               icon:
                                   const Icon(Icons.close, color: Colors.white))
                         ],
@@ -1271,7 +1489,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 24.0),
                       child: Container(
                         width: isLandscape ? 400 : double.infinity,
-                        height: MediaQuery.of(context).size.height * 0.45,
+                        height: MediaQuery.of(context).size.height * (isLandscape ? 0.4 : 0.38),
                         decoration: BoxDecoration(
                           color: Colors.black,
                           borderRadius: BorderRadius.circular(24),
@@ -1332,39 +1550,79 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: _peerId!
-                                  .split('')
-                                  .map((char) => Container(
-                                        width: 36,
-                                        height: 48,
-                                        margin: const EdgeInsets.symmetric(
-                                            horizontal: 2),
-                                        alignment: Alignment.center,
-                                        decoration: BoxDecoration(
-                                            color: Colors.black,
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            border: Border.all(
-                                                color: kPrimaryColor
-                                                    .withOpacity(0.5))),
-                                        child: Text(char,
-                                            style: const TextStyle(
-                                                fontSize: 24,
-                                                fontWeight: FontWeight.bold,
-                                                color: kPrimaryColor)),
-                                      ))
-                                  .toList(),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: _peerId!
+                                    .split('')
+                                    .map((char) => Container(
+                                          width: 32,
+                                          height: 48,
+                                          margin: const EdgeInsets.symmetric(
+                                              horizontal: 2.5),
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                              color: Colors.black,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                  color: kPrimaryColor
+                                                      .withOpacity(0.5))),
+                                          child: Text(char,
+                                              style: const TextStyle(
+                                                  fontSize: 22,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: kPrimaryColor)),
+                                        ))
+                                    .toList(),
+                              ),
                             ),
                             const SizedBox(height: 20),
                             if (!_isScreenSharing)
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: _switchCamera,
+                                    icon: const Icon(Icons.flip_camera_ios,
+                                        color: Colors.white),
+                                    label: const Text("Switch",
+                                        style: TextStyle(color: Colors.white)),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  TextButton.icon(
+                                    onPressed: _toggleMute,
+                                    icon: Icon(
+                                        _isMuted
+                                            ? Icons.mic_off_rounded
+                                            : Icons.mic_rounded,
+                                        color: _isMuted
+                                            ? Colors.redAccent
+                                            : Colors.white),
+                                    label: Text(_isMuted ? "Muted" : "Mute",
+                                        style: TextStyle(
+                                            color: _isMuted
+                                                ? Colors.redAccent
+                                                : Colors.white)),
+                                  ),
+                                ],
+                              ),
+                            if (_isScreenSharing)
                               TextButton.icon(
-                                onPressed: _switchCamera,
-                                icon: const Icon(Icons.flip_camera_ios,
-                                    color: Colors.white),
-                                label: const Text("Switch Camera",
-                                    style: TextStyle(color: Colors.white)),
+                                onPressed: _toggleMute,
+                                icon: Icon(
+                                    _isMuted
+                                        ? Icons.mic_off_rounded
+                                        : Icons.mic_rounded,
+                                    color: _isMuted
+                                        ? Colors.redAccent
+                                        : Colors.white),
+                                label: Text(_isMuted ? "Mic Muted" : "Mic On",
+                                    style: TextStyle(
+                                        color: _isMuted
+                                            ? Colors.redAccent
+                                            : Colors.white)),
                               ),
                             const SizedBox(height: 16),
                             SizedBox(
@@ -1576,20 +1834,24 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       if (kDebugMode) debugPrint("Peer Error: $err");
       if (mounted) {
         setState(() => _isConnecting = false);
-        _showErrorDialog("Connection Failed. Check your access key.");
+        _showErrorDialog(
+            "Could not connect to the stream. Please verify the access key is correct and ensure the broadcaster is still online.");
       }
     });
   }
 
   void _showEndedDialog() {
     if (!mounted) return;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => Center(
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 40),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          margin: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+          constraints: const BoxConstraints(maxWidth: 450),
           decoration: BoxDecoration(
             color: kSurfaceColor,
             borderRadius: BorderRadius.circular(30),
@@ -1602,65 +1864,73 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               )
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.videocam_off_rounded,
-                    color: kPrimaryColor, size: 48),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: isLandscape ? 24 : 32,
               ),
-              const SizedBox(height: 24),
-              const Text(
-                "Broadcast Ended",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                "The presenter has stop sharing their screen.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: kTextSecondary,
-                  fontSize: 14,
-                  height: 1.5,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.of(ctx).pop(); // Close dialog
-                    Navigator.of(context).pop(); // Exit screen
-                  },
-                  style: TextButton.styleFrom(
-                    backgroundColor: kPrimaryColor,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      shape: BoxShape.circle,
                     ),
+                    child: Icon(Icons.videocam_off_rounded,
+                        color: kPrimaryColor, size: isLandscape ? 36 : 48),
                   ),
-                  child: const Text(
-                    "BACK TO HOME",
+                  SizedBox(height: isLandscape ? 16 : 24),
+                  const Text(
+                    "Broadcast Ended",
                     style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1,
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.none,
                     ),
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    "The presenter has stop sharing their screen.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: kTextSecondary,
+                      fontSize: 14,
+                      height: 1.5,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  SizedBox(height: isLandscape ? 24 : 32),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop(); // Close dialog
+                        Navigator.of(context).pop(); // Exit screen
+                      },
+                      style: TextButton.styleFrom(
+                        backgroundColor: kPrimaryColor,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        "BACK TO HOME",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1669,12 +1939,15 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
   void _showErrorDialog(String message) {
     if (!mounted) return;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     showDialog(
       context: context,
       builder: (ctx) => Center(
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 40),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          margin: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+          constraints: const BoxConstraints(maxWidth: 450),
           decoration: BoxDecoration(
             color: kSurfaceColor,
             borderRadius: BorderRadius.circular(30),
@@ -1687,62 +1960,70 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               )
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.05),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.error_outline_rounded,
-                    color: Colors.redAccent, size: 48),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: isLandscape ? 24 : 32,
               ),
-              const SizedBox(height: 24),
-              const Text(
-                "Connection Error",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: kTextSecondary,
-                  fontSize: 14,
-                  height: 1.5,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.white10,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.05),
+                      shape: BoxShape.circle,
                     ),
+                    child: Icon(Icons.error_outline_rounded,
+                        color: Colors.redAccent, size: isLandscape ? 36 : 48),
                   ),
-                  child: const Text(
-                    "OK",
+                  SizedBox(height: isLandscape ? 16 : 24),
+                  const Text(
+                    "Connection Error",
                     style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
+                      decoration: TextDecoration.none,
                     ),
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: kTextSecondary,
+                      fontSize: 14,
+                      height: 1.5,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  SizedBox(height: isLandscape ? 24 : 32),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.white10,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        "OK",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1791,72 +2072,155 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                     MediaQuery.of(context).padding.top),
             child: Padding(
               padding: const EdgeInsets.all(32.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  SizedBox(height: isLandscape ? 20 : 100), // Offset from top
-                  const Text("ENTER ACCESS KEY",
-                      style: TextStyle(
-                          color: kTextSecondary,
-                          letterSpacing: 3,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 24),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 400),
-                    child: TextField(
-                      controller: _codeController,
-                      textAlign: TextAlign.center,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      style: TextStyle(
-                          fontSize: isLandscape ? 32 : 48,
-                          fontWeight: FontWeight.w900,
-                          color: kPrimaryColor,
-                          letterSpacing: isLandscape ? 4 : 8),
-                      decoration: InputDecoration(
-                        counterText: "",
-                        filled: true,
-                        fillColor: kSurfaceColor,
-                        contentPadding: EdgeInsets.symmetric(
-                            vertical: isLandscape ? 12 : 24),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none),
-                        hintText: "000000",
-                        hintStyle:
-                            TextStyle(color: kSurfaceColor.withBlue(40)),
-                      ),
+              child: isLandscape
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Left Column: Label + Input
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text("ENTER ACCESS KEY",
+                                  style: TextStyle(
+                                      color: kTextSecondary,
+                                      letterSpacing: 2,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 12),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 320),
+                                child: TextField(
+                                  controller: _codeController,
+                                  textAlign: TextAlign.center,
+                                  keyboardType: TextInputType.number,
+                                  maxLength: 6,
+                                  style: const TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w900,
+                                      color: kPrimaryColor,
+                                      letterSpacing: 4),
+                                  decoration: InputDecoration(
+                                    counterText: "",
+                                    filled: true,
+                                    fillColor: kSurfaceColor,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        vertical: 10, horizontal: 16),
+                                    border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                        borderSide: BorderSide.none),
+                                    hintText: "000000",
+                                    hintStyle: TextStyle(
+                                        color: kSurfaceColor.withBlue(40)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 32),
+                        // Right Column: Button
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 240),
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  height: 56,
+                                  child: ElevatedButton(
+                                    onPressed: _isConnecting ? null : _joinStream,
+                                    style: ElevatedButton.styleFrom(
+                                        backgroundColor: kPrimaryColor,
+                                        foregroundColor: Colors.black,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(16))),
+                                    child: _isConnecting
+                                        ? const CircularProgressIndicator(
+                                            color: Colors.black)
+                                        : const Text("CONNECT",
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.w900,
+                                                fontSize: 16,
+                                                letterSpacing: 1)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 80),
+                        const Text("ENTER ACCESS KEY",
+                            style: TextStyle(
+                                color: kTextSecondary,
+                                letterSpacing: 2,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 400),
+                          child: TextField(
+                            controller: _codeController,
+                            textAlign: TextAlign.center,
+                            keyboardType: TextInputType.number,
+                            maxLength: 6,
+                            style: const TextStyle(
+                                fontSize: 48,
+                                fontWeight: FontWeight.w900,
+                                color: kPrimaryColor,
+                                letterSpacing: 8),
+                            decoration: InputDecoration(
+                              counterText: "",
+                              filled: true,
+                              fillColor: kSurfaceColor,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 24, horizontal: 16),
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide.none),
+                              hintText: "000000",
+                              hintStyle: TextStyle(
+                                  color: kSurfaceColor.withBlue(40)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 400),
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: 60,
+                            child: ElevatedButton(
+                              onPressed: _isConnecting ? null : _joinStream,
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: kPrimaryColor,
+                                  foregroundColor: Colors.black,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16))),
+                              child: _isConnecting
+                                  ? const CircularProgressIndicator(
+                                      color: Colors.black)
+                                  : const Text("CONNECT NOW",
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 16,
+                                          letterSpacing: 1)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 100),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 40),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 400),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 60,
-                      child: ElevatedButton(
-                        onPressed: _isConnecting ? null : _joinStream,
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: kPrimaryColor,
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16))),
-                        child: _isConnecting
-                            ? const CircularProgressIndicator(
-                                color: Colors.black)
-                            : const Text("CONNECT NOW",
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 16,
-                                    letterSpacing: 1)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 100), // Bottom padding to ensure scrollability if needed
-                ],
-              ),
             ),
           ),
         ),

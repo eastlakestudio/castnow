@@ -32,7 +32,9 @@
         "sharing_key": "投屏访问码",
         "desktop_mirror": "桌面镜像",
         "camera_feed": "摄像头画面",
-        "terminate": "结束投屏"
+        "terminate": "结束投屏",
+        "muted": "已静音",
+        "mic_on": "麦克风"
     },
     "receiver": {
         "title": "输入访问码",

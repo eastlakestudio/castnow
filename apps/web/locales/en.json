@@ -32,7 +32,9 @@
         "sharing_key": "Sharing Access Key",
         "desktop_mirror": "Desktop Mirror",
         "camera_feed": "Camera Feed",
-        "terminate": "Terminate Stream"
+        "terminate": "Terminate Stream",
+        "muted": "Muted",
+        "mic_on": "Mic On"
     },
     "receiver": {
         "title": "Enter Access Key",

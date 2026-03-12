@@ -1,4 +1,4 @@
-package com.castnow.app
+package com.eastlakestudio.castnow.app
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -203,7 +203,7 @@ class MediaProjectionService : Service() {
         Log.d("CastNow", "MediaProjectionService: onDestroy. Broadcasting stop signal.")
 
         // Signal MainActivity that the service is shutting down
-        val intent = Intent("com.castnow.app.STOP_SESSION")
+        val intent = Intent("com.eastlakestudio.castnow.app.STOP_SESSION")
         intent.setPackage(packageName)
         sendBroadcast(intent)
 
