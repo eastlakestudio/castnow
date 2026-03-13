@@ -12,8 +12,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 // --- Constants & Theme ---
 const Color kBackgroundColor = Color(0xFF020617);
@@ -22,8 +23,35 @@ const Color kPrimaryColor = Color(0xFFF59E0B);
 const Color kTextPrimary = Color(0xFFF8FAFC);
 const Color kTextSecondary = Color(0xFF94A3B8);
 
-const String kProProductId = 'com.eastlakestudio.castnow.app';
 const String kProVersionKey = 'is_pro_version';
+const String kGumroadLicenseKey = 'gumroad_license_key';
+const String kGumroadProductPermalink = 'ihhtg';
+
+class GumroadService {
+  static Future<bool> verifyLicense(String licenseKey, {http.Client? client}) async {
+    final httpClient = client ?? http.Client();
+    try {
+      final response = await httpClient.post(
+        Uri.parse('https://api.gumroad.com/v2/licenses/verify'),
+        body: {
+          'product_permalink': kGumroadProductPermalink,
+          'license_key': licenseKey,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['success'] == true &&
+            data['purchase'] != null &&
+            data['purchase']['refunded'] != true &&
+            data['purchase']['chargebacked'] != true;
+      }
+      return false;
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -69,13 +97,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   // Paid App Model: Pro version check
   bool _isPro = false;
-  late StreamSubscription<List<PurchaseDetails>> _subscription;
+  final TextEditingController _licenseController = TextEditingController();
+  bool _isVerifying = false;
 
   @override
   void initState() {
     super.initState();
     _loadProStatus();
-    _initializeIAP();
   }
 
   Future<void> _loadProStatus() async {
@@ -83,131 +111,91 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _isPro = prefs.getBool(kProVersionKey) ?? false;
     });
-  }
-
-  void _initializeIAP() {
-    final Stream<List<PurchaseDetails>> purchaseUpdated =
-        InAppPurchase.instance.purchaseStream;
-    _subscription = purchaseUpdated.listen((purchaseDetailsList) {
-      _listenToPurchaseUpdated(purchaseDetailsList);
-    }, onDone: () {
-      _subscription.cancel();
-    }, onError: (error) {
-      // Handle error here
-    });
-  }
-
-  void _listenToPurchaseUpdated(List<PurchaseDetails> purchaseDetailsList) {
-    purchaseDetailsList.forEach((PurchaseDetails purchaseDetails) async {
-      if (purchaseDetails.status == PurchaseStatus.pending) {
-        // Show pending UI
-      } else {
-        if (purchaseDetails.status == PurchaseStatus.error) {
-          // Show error UI
-        } else if (purchaseDetails.status == PurchaseStatus.purchased ||
-            purchaseDetails.status == PurchaseStatus.restored) {
-          _updateProStatus(true);
-        }
-        if (purchaseDetails.pendingCompletePurchase) {
-          await InAppPurchase.instance.completePurchase(purchaseDetails);
-        }
-      }
-    });
-  }
-
-  Future<void> _updateProStatus(bool isPro) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(kProVersionKey, isPro);
-    setState(() {
-      _isPro = isPro;
-    });
-  }
-
-  Future<void> _buyPro() async {
-    try {
-      final bool available = await InAppPurchase.instance.isAvailable();
-      if (!available) {
-        if (mounted) {
-          _showErrorDialog("Google Play Store is not available on this device.");
-        }
-        return;
-      }
-
-      final ProductDetailsResponse response =
-          await InAppPurchase.instance.queryProductDetails({kProProductId});
-
-      if (response.notFoundIDs.isNotEmpty) {
-        debugPrint("Product not found: ${response.notFoundIDs}");
-      }
-
-      if (response.productDetails.isNotEmpty) {
-        final productDetails = response.productDetails.first;
-        final PurchaseParam purchaseParam =
-            PurchaseParam(productDetails: productDetails);
-        await InAppPurchase.instance.buyNonConsumable(purchaseParam: purchaseParam);
-      }
-    } catch (e) {
-      debugPrint("Purchase error: $e");
+    
+    // Check if we have a stored license key to verify on startup
+    final storedLicense = prefs.getString(kGumroadLicenseKey);
+    if (storedLicense != null && storedLicense.isNotEmpty) {
+      _verifyGumroadLicense(storedLicense, silent: true);
     }
   }
 
-  Future<void> _restorePurchases() async {
+  Future<void> _verifyGumroadLicense(String licenseKey, {bool silent = false}) async {
+    if (!silent) {
+      setState(() => _isVerifying = true);
+    }
+
     try {
-      final bool available = await InAppPurchase.instance.isAvailable();
-      if (!available) {
-        if (mounted) {
-          _showErrorDialog("Google Play Store is not available.");
+      final isValid = await GumroadService.verifyLicense(licenseKey);
+
+      if (isValid) {
+        await _updateProStatus(true, licenseKey: licenseKey);
+        if (!silent && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('PRO Activated Successfully!')),
+          );
         }
-        return;
-      }
-      await InAppPurchase.instance.restorePurchases();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Restoring purchases...')),
-        );
+      } else {
+        if (!silent) {
+          _showErrorDialog("Invalid or inactive license key.");
+          await _updateProStatus(false);
+        } else {
+          if (_isPro) {
+            await _updateProStatus(false);
+          }
+        }
       }
     } catch (e) {
-      debugPrint("Restore error: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Restore failed: $e')),
-        );
+      debugPrint("Verification error: $e");
+      if (!silent) {
+        _showErrorDialog("Connection error. Please try again later.");
       }
+    } finally {
+      if (!silent && mounted) {
+        setState(() => _isVerifying = false);
+      }
+    }
+  }
+
+  Future<void> _updateProStatus(bool isPro, {String? licenseKey}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(kProVersionKey, isPro);
+    if (isPro && licenseKey != null) {
+      await prefs.setString(kGumroadLicenseKey, licenseKey);
+    } else if (!isPro) {
+      await prefs.remove(kGumroadLicenseKey);
+    }
+    
+    if (mounted) {
+      setState(() {
+        _isPro = isPro;
+      });
     }
   }
 
   void _showProDialog() async {
-    String price = "---";
-    try {
-      final ProductDetailsResponse response =
-          await InAppPurchase.instance.queryProductDetails({kProProductId});
-      if (response.productDetails.isNotEmpty) {
-        price = response.productDetails.first.price;
-      }
-    } catch (_) {}
-
     if (!mounted) return;
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: EdgeInsets.all(isLandscape ? 16 : 24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F172A),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white10),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.5),
-                blurRadius: 40,
-                offset: const Offset(0, 20),
-              )
-            ],
-          ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: EdgeInsets.all(isLandscape ? 16 : 24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: Colors.white10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 40,
+                  offset: const Offset(0, 20),
+                )
+              ],
+            ),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -232,64 +220,91 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   SizedBox(height: isLandscape ? 8 : 12),
                   const Text(
-                    "Unlock all features and enjoy seamless screen sharing experience.",
+                    "Unlock all features for life with a one-time purchase on Gumroad.",
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: kTextSecondary, fontSize: 14),
+                    style: TextStyle(color: kTextSecondary, fontSize: 13),
                   ),
-                  SizedBox(height: isLandscape ? 16 : 24),
-                  _buildProFeature(
-                      Icons.timer_off_rounded, "Unlimited Casting Time", isLandscape),
-                  _buildProFeature(Icons.bolt_rounded, "Faster Connection", isLandscape),
-                  _buildProFeature(Icons.hd_rounded, "High Definition Quality", isLandscape),
-                  SizedBox(height: isLandscape ? 16 : 24),
+                  SizedBox(height: isLandscape ? 16 : 20),
+                  
+                  // License Input
+                  TextField(
+                    controller: _licenseController,
+                    decoration: InputDecoration(
+                      hintText: "Enter License Key",
+                      filled: true,
+                      fillColor: Colors.black26,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      prefixIcon: const Icon(Icons.vpn_key_rounded, size: 20),
+                    ),
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 12),
+                  
                   SizedBox(
                     width: double.infinity,
-                    height: isLandscape ? 48 : 56,
+                    height: 52,
                     child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _buyPro();
+                      onPressed: _isVerifying ? null : () async {
+                        final key = _licenseController.text.trim();
+                        if (key.isEmpty) return;
+                        setDialogState(() => _isVerifying = true);
+                        await _verifyGumroadLicense(key);
+                        if (mounted) {
+                          setDialogState(() => _isVerifying = false);
+                          if (_isPro) Navigator.pop(context);
+                        }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: kPrimaryColor,
                         foregroundColor: Colors.black,
-                        elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: Text(
-                        "Unlock for $price",
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      child: _isVerifying 
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                        : const Text("ACTIVATE PRO", style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  
+                  SizedBox(height: isLandscape ? 16 : 20),
+                  const Divider(color: Colors.white10),
+                  SizedBox(height: isLandscape ? 16 : 20),
+                  
+                  _buildProFeature(Icons.timer_off_rounded, "Unlimited Casting Time", isLandscape),
+                  _buildProFeature(Icons.bolt_rounded, "Faster Connection", isLandscape),
+                  _buildProFeature(Icons.hd_rounded, "High Definition Quality", isLandscape),
+                  
+                  SizedBox(height: isLandscape ? 20 : 28),
+                  
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton(
+                      onPressed: () => _launchURL("https://gumroad.com/l/$kGumroadProductPermalink"),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kPrimaryColor,
+                        side: const BorderSide(color: kPrimaryColor),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
+                      child: const Text("BUY ON GUMROAD (\$5.99)", style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  SizedBox(height: isLandscape ? 4 : 12),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _restorePurchases();
-                    },
-                    child: const Text(
-                      "Restore Purchases",
-                      style: TextStyle(
-                          color: kPrimaryColor, fontWeight: FontWeight.bold),
-                    ),
-                  ),
+                  
                   if (!isLandscape)
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      "Later",
-                      style: TextStyle(color: kTextSecondary),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text("LATER", style: TextStyle(color: kTextSecondary)),
                     ),
-                  ),
                 ],
               ),
             ),
+          ),
         ),
       ),
     );
@@ -315,7 +330,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _subscription.cancel();
+    _licenseController.dispose();
     super.dispose();
   }
 
