@@ -292,7 +292,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text("BUY ON GUMROAD (\$5.99)", style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: const Text("BUY ON GUMROAD (\$19.99)", style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                   
