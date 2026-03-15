@@ -878,7 +878,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   // Time Limit Logic
   Timer? _limitTimer;
-  int _remainingSeconds = 600; // 10 minutes
+  int _remainingSeconds = 180; // 3 minutes
 
 
   @override
@@ -1184,7 +1184,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
       // Start timer if not PRO
       if (!widget.isPro) {
-        _remainingSeconds = 600;
+        _remainingSeconds = 180;
         _limitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
           if (!mounted) {
             timer.cancel();
@@ -1302,7 +1302,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    "Free version is limited to 10 minutes per session.\n\nPlease upgrade to PRO for unlimited casting.",
+                    "Free version is limited to 3 minutes per session.\n\nPlease upgrade to PRO for unlimited casting.",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: kTextSecondary,
