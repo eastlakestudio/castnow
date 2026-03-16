@@ -107,6 +107,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadProStatus() async {
+    // Paid App Model: iOS follows Paid-to-Download model
+    if (!kIsWeb && Platform.isIOS) {
+      setState(() {
+        _isPro = true;
+      });
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _isPro = prefs.getBool(kProVersionKey) ?? false;
@@ -174,6 +182,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showProDialog() async {
     if (!mounted) return;
+    // Safety check: Never show Gumroad on iOS to comply with App Store rules
+    if (!kIsWeb && Platform.isIOS) return;
+
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
@@ -699,56 +710,58 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           // Refined Top-Right PRO Badge / Status
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 12,
-            left: 20,
-            child: GestureDetector(
-              onTap: _isPro ? null : _showProDialog,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  gradient: _isPro
-                      ? const LinearGradient(
-                          colors: [Color(0xFF334155), Color(0xFF1E293B)],
+          // Only show on non-iOS platforms (since iOS is paid-upfront)
+          if (kIsWeb || !Platform.isIOS)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 12,
+              left: 20,
+              child: GestureDetector(
+                onTap: _isPro ? null : _showProDialog,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: _isPro
+                        ? const LinearGradient(
+                            colors: [Color(0xFF334155), Color(0xFF1E293B)],
+                          )
+                        : const LinearGradient(
+                            colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                          ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: _isPro ? Colors.white10 : Colors.white24,
+                        width: 0.5),
+                    boxShadow: [
+                      if (!_isPro)
+                        BoxShadow(
+                          color: kPrimaryColor.withOpacity(0.4),
+                          blurRadius: 15,
+                          spreadRadius: -2,
+                          offset: const Offset(0, 6),
                         )
-                      : const LinearGradient(
-                          colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                        ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                      color: _isPro ? Colors.white10 : Colors.white24,
-                      width: 0.5),
-                  boxShadow: [
-                    if (!_isPro)
-                      BoxShadow(
-                        color: kPrimaryColor.withOpacity(0.4),
-                        blurRadius: 15,
-                        spreadRadius: -2,
-                        offset: const Offset(0, 6),
-                      )
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                        _isPro ? Icons.verified_rounded : Icons.stars_rounded,
-                        color: _isPro ? const Color(0xFF38BDF8) : Colors.black,
-                        size: 16),
-                    const SizedBox(width: 6),
-                    Text(
-                      _isPro ? "PRO" : "GO PRO",
-                      style: TextStyle(
-                          color: _isPro ? Colors.white.withOpacity(0.9) : Colors.black,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1),
-                    ),
-                  ],
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                          _isPro ? Icons.verified_rounded : Icons.stars_rounded,
+                          color: _isPro ? const Color(0xFF38BDF8) : Colors.black,
+                          size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        _isPro ? "PRO" : "GO PRO",
+                        style: TextStyle(
+                            color: _isPro ? Colors.white.withOpacity(0.9) : Colors.black,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
