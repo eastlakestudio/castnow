@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:castnow_app/services/iap_service.dart';
 import 'dart:convert';
 
 // --- Constants & Theme ---
@@ -55,6 +56,7 @@ class GumroadService {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await IAPService().initialize();
   runApp(const CastNowApp());
 }
 
@@ -99,22 +101,33 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isPro = false;
   final TextEditingController _licenseController = TextEditingController();
   bool _isVerifying = false;
+  late StreamSubscription<bool> _iapSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadProStatus();
+    _iapSubscription = IAPService().proStatusStream.listen((isPro) {
+      if (mounted) {
+        setState(() {
+          _isPro = isPro;
+        });
+      }
+    });
   }
 
   Future<void> _loadProStatus() async {
-    // Paid App Model: iOS follows Paid-to-Download model
-    if (!kIsWeb && Platform.isIOS) {
+    // 优先从 IAPService 获取 Pro 状态
+    await IAPService().loadProStatus();
+    if (IAPService().isPro) {
       setState(() {
         _isPro = true;
       });
       return;
     }
 
+    // 只有在非 iOS/macOS 平台才尝试 Paid-to-Download 历史逻辑
+    // 或者用户之前是通过 Gumroad 购买的
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _isPro = prefs.getBool(kProVersionKey) ?? false;
@@ -182,9 +195,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showProDialog() async {
     if (!mounted) return;
-    // Safety check: Never show Gumroad on iOS to comply with App Store rules
-    if (!kIsWeb && Platform.isIOS) return;
-
+    
+    final bool isApplePlatform = !kIsWeb && (Platform.isIOS || Platform.isMacOS);
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
@@ -222,7 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   SizedBox(height: isLandscape ? 12 : 20),
                   const Text(
-                    "Upgrade to Pro",
+                    "Upgrade to Unlimited",
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 22,
@@ -230,56 +242,125 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   SizedBox(height: isLandscape ? 8 : 12),
-                  const Text(
-                    "Unlock all features for life with a one-time purchase on Gumroad.",
+                  Text(
+                    isApplePlatform 
+                      ? "Unlock all features forever with a one-time purchase."
+                      : "Unlock all features for life with a one-time purchase on Gumroad.",
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: kTextSecondary, fontSize: 13),
+                    style: const TextStyle(color: kTextSecondary, fontSize: 13),
                   ),
                   SizedBox(height: isLandscape ? 16 : 20),
                   
-                  // License Input
-                  TextField(
-                    controller: _licenseController,
-                    decoration: InputDecoration(
-                      hintText: "Enter License Key",
-                      filled: true,
-                      fillColor: Colors.black26,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
+                  if (!isApplePlatform) ...[
+                    // License Input (Only for non-Apple platforms)
+                    TextField(
+                      controller: _licenseController,
+                      decoration: InputDecoration(
+                        hintText: "Enter License Key",
+                        filled: true,
+                        fillColor: Colors.black26,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        prefixIcon: const Icon(Icons.vpn_key_rounded, size: 20),
                       ),
-                      prefixIcon: const Icon(Icons.vpn_key_rounded, size: 20),
+                      style: const TextStyle(fontSize: 14),
                     ),
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
+                    const SizedBox(height: 12),
+                    
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: _isVerifying ? null : () async {
+                          final key = _licenseController.text.trim();
+                          if (key.isEmpty) return;
+                          setDialogState(() => _isVerifying = true);
+                          await _verifyGumroadLicense(key);
+                          if (mounted) {
+                            setDialogState(() => _isVerifying = false);
+                            if (_isPro) Navigator.pop(context);
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kPrimaryColor,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: _isVerifying 
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                          : const Text("ACTIVATE PRO", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ] else ...[
+                    // Apple IAP Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: _isVerifying ? null : () async {
+                          setDialogState(() => _isVerifying = true);
+                          try {
+                            await IAPService().buyUnlimited();
+                            // Success is handled by the stream listener in initState
+                          } catch (e) {
+                            _showErrorDialog(e.toString());
+                          } finally {
+                            if (mounted) setDialogState(() => _isVerifying = false);
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kPrimaryColor,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: _isVerifying 
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                          : const Text("UPGRADE NOW", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
                       onPressed: _isVerifying ? null : () async {
-                        final key = _licenseController.text.trim();
-                        if (key.isEmpty) return;
                         setDialogState(() => _isVerifying = true);
-                        await _verifyGumroadLicense(key);
-                        if (mounted) {
-                          setDialogState(() => _isVerifying = false);
-                          if (_isPro) Navigator.pop(context);
+                        try {
+                          await IAPService().restorePurchases();
+                          // Wait a short time for stream to process
+                          await Future.delayed(const Duration(seconds: 1));
+                          if (mounted) {
+                            if (IAPService().isPro) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Purchases Restored Successfully!'))
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('No previous purchases found.'))
+                              );
+                            }
+                          }
+                        } catch (e) {
+                          _showErrorDialog(e.toString());
+                        } finally {
+                          if (mounted) setDialogState(() => _isVerifying = false);
                         }
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kPrimaryColor,
-                        foregroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      child: const Text(
+                        "Restore Purchases", 
+                        style: TextStyle(
+                          color: kPrimaryColor,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                          decorationColor: kPrimaryColor,
                         ),
                       ),
-                      child: _isVerifying 
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                        : const Text("ACTIVATE PRO", style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
-                  ),
+                  ],
                   
                   SizedBox(height: isLandscape ? 16 : 20),
                   const Divider(color: Colors.white10),
@@ -291,21 +372,22 @@ class _HomeScreenState extends State<HomeScreen> {
                   
                   SizedBox(height: isLandscape ? 20 : 28),
                   
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: OutlinedButton(
-                      onPressed: () => _launchURL("https://gumroad.com/l/$kGumroadProductPermalink"),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: kPrimaryColor,
-                        side: const BorderSide(color: kPrimaryColor),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  if (!isApplePlatform)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton(
+                        onPressed: () => _launchURL("https://gumroad.com/l/$kGumroadProductPermalink"),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: kPrimaryColor,
+                          side: const BorderSide(color: kPrimaryColor),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
+                        child: const Text("BUY ON GUMROAD (\$19.99)", style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
-                      child: const Text("BUY ON GUMROAD (\$19.99)", style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
-                  ),
                   
                   if (!isLandscape)
                     TextButton(
@@ -342,18 +424,34 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _licenseController.dispose();
+    _iapSubscription.cancel();
     super.dispose();
   }
 
   Future<void> _launchURL(String url) async {
-    final Uri uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      throw Exception('Could not launch $url');
+    try {
+      final Uri uri = Uri.parse(url);
+      final mode = url.startsWith('mailto:') 
+          ? LaunchMode.platformDefault 
+          : LaunchMode.externalApplication;
+          
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: mode);
+      } else {
+        debugPrint('Could not launch $url');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open link. Please check if a mail app is installed.')),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error launching URL: $e');
     }
   }
 
   void _showInfoDialog(BuildContext context, String title, String content,
-      {String? url}) {
+      {String? url, String? urlText}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -364,13 +462,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: kPrimaryColor, fontWeight: FontWeight.bold)),
         content: SingleChildScrollView(
             child:
-                Text(content, style: const TextStyle(color: kTextSecondary))),
+                SelectableText(content, style: const TextStyle(color: kTextSecondary))),
         actions: [
           if (url != null)
             TextButton(
               onPressed: () => _launchURL(url),
-              child: const Text("VIEW ON GITHUB",
-                  style: TextStyle(
+              child: Text(urlText ?? "VIEW ON GITHUB",
+                  style: const TextStyle(
                       color: kPrimaryColor, fontWeight: FontWeight.bold)),
             ),
           TextButton(
@@ -608,9 +706,9 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildFooterLink(context, "SOURCE", "Source Code",
-                  "The source code for CastNow is available on GitHub under the MIT license.",
-                  url: "https://github.com/MinghuaLiu1977/castnow"),
+              _buildFooterLink(context, "SUPPORT", "Contact Support",
+                  "If you encounter any issues or have feedback, please don't hesitate to reach out to us at:\n\nmingh.liu@gmail.com",
+                  url: "mailto:mingh.liu@gmail.com", urlText: "CONTACT US"),
               if (!isLandscape) const SizedBox(width: 32),
               if (isLandscape) const SizedBox(width: 24),
               _buildFooterLink(context, "PRIVACY", "Privacy Policy",
@@ -711,7 +809,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           // Refined Top-Right PRO Badge / Status
           // Only show on non-iOS platforms (since iOS is paid-upfront)
-          if (kIsWeb || !Platform.isIOS)
+          if (true) // Always show the PRO button/badge
             Positioned(
               top: MediaQuery.of(context).padding.top + 12,
               left: 20,
@@ -769,9 +867,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildFooterLink(
       BuildContext context, String label, String title, String content,
-      {String? url}) {
+      {String? url, String? urlText}) {
     return GestureDetector(
-      onTap: () => _showInfoDialog(context, title, content, url: url),
+      onTap: () => _showInfoDialog(context, title, content, url: url, urlText: urlText),
       child: Text(
         label,
         style: const TextStyle(
@@ -1242,9 +1340,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             !errorStr.contains('give permission')) {
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text("Error: $e")));
-        } else {
-          if (kDebugMode) debugPrint(
-              "User cancelled or denied permission. Returning to selection.");
         }
       }
     }
@@ -1255,13 +1350,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       final tracks = _localStream!.getVideoTracks();
       if (tracks.isNotEmpty) {
         await Helper.switchCamera(tracks.first);
-      } else {
-        if (kDebugMode) debugPrint("❌ No video tracks found to switch.");
       }
     }
   }
 
-  void _showTimeUpDialog() {
+   void _showTimeUpDialog() {
     if (!mounted) return;
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
@@ -1294,7 +1387,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
+                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.orange.withOpacity(0.05),
@@ -1325,14 +1418,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                     ),
                   ),
                   SizedBox(height: isLandscape ? 24 : 32),
-                  SizedBox(
+                   SizedBox(
                     width: double.infinity,
-                    child: TextButton(
+                    child: ElevatedButton(
                       onPressed: () {
                         Navigator.pop(ctx);
                         _handleExit();
                       },
-                      style: TextButton.styleFrom(
+                      style: ElevatedButton.styleFrom(
                         backgroundColor: kPrimaryColor,
                         foregroundColor: Colors.black,
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1341,7 +1434,32 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                         ),
                       ),
                       child: const Text(
-                        "CLOSE",
+                        "GO PRO / UPGRADE",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _handleExit();
+                      },
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.white10,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        "LATER",
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1,
@@ -1357,6 +1475,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       ),
     );
   }
+
 
   @override
   void dispose() {
