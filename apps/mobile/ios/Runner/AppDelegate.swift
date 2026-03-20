@@ -3,15 +3,19 @@ import UIKit
 import ReplayKit
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     
     // 1. Register PlatformView & MethodChannel
-    if let registrar = self.registrar(forPlugin: "CastNowPickerPlugin") {
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "CastNowPickerPlugin") {
       let factory = BroadcastPickerFactory()
       registrar.register(factory, withId: "castnow_picker_view")
       
@@ -30,13 +34,19 @@ import ReplayKit
               result(FlutterMethodNotImplemented)
           }
       }
-      print("✅ [CASTNOW] PlatformView and ControlChannel registered.")
+      print("✅ [CASTNOW] PlatformView and ControlChannel registered in didInitializeImplicitFlutterEngine.")
       BroadcastPickerManager.shared.log("✅ Native logic initialized")
     } else {
       print("❌ [CASTNOW] Failed to get registrar for CastNowPickerPlugin")
     }
-    
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    configurationForConnecting connectingSceneSession: UISceneSession,
+    options: UIScene.ConnectionOptions
+  ) -> UISceneConfiguration {
+    return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
   }
 }
 
