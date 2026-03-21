@@ -24,6 +24,7 @@ import {
   Smartphone,
   Zap,
   Shield,
+  Apple,
 } from "lucide-vue-next";
 
 const { t, locale } = useI18n();
@@ -514,15 +515,22 @@ const resetApp = (forceLanding = false) => {
               <Download class="w-6 h-6" />
               {{ $t('landing.receive') }}
             </button>
-            <div class="flex gap-4 w-full max-w-sm mx-auto">
+            <div class="flex flex-wrap gap-4 w-full max-w-sm mx-auto justify-center">
               <a href="/castnow.apk" download
-                class="flex-1 py-4 bg-slate-900 border border-slate-800 rounded-3xl font-black text-sm uppercase active:scale-95 transition-all flex items-center justify-center gap-2 hover:border-slate-700">
-                <Smartphone class="w-4 h-4" />
-                <span>{{ $t('landing.android_apk') }}</span>
+                class="flex-1 min-w-[140px] h-11 bg-slate-900 border border-slate-800 rounded-xl hover:border-amber-500 transition-all flex items-center px-4 gap-3 group active:scale-95">
+                <Smartphone class="w-6 h-6 text-amber-500 group-hover:scale-110 transition-transform" />
+                <div class="flex flex-col items-start leading-none">
+                  <span class="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">Download for</span>
+                  <span class="text-xs font-black text-slate-100 uppercase tracking-tight">Android APK</span>
+                </div>
               </a>
               <a href="https://apps.apple.com/us/app/castnow-p2p-screen-sharing/id6759210431" target="_blank"
-                class="flex-1 active:scale-95 transition-all">
-                <img src="/app_store_badge.png" alt="Download on the App Store" class="h-full w-full object-contain" />
+                class="flex-1 min-w-[140px] h-11 bg-black border border-slate-800 rounded-xl hover:border-amber-500 transition-all flex items-center px-4 gap-3 group active:scale-95">
+                <Apple class="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
+                <div class="flex flex-col items-start leading-none">
+                  <span class="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Download on the</span>
+                  <span class="text-xs font-black text-white uppercase tracking-tight">App Store</span>
+                </div>
               </a>
             </div>
 
