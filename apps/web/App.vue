@@ -521,9 +521,8 @@ const resetApp = (forceLanding = false) => {
                 <span>{{ $t('landing.android_apk') }}</span>
               </a>
               <a href="https://apps.apple.com/us/app/castnow-p2p-screen-sharing/id6759210431" target="_blank"
-                class="flex-1 py-4 bg-slate-950 border border-slate-800 rounded-3xl font-black text-xs uppercase flex items-center justify-center gap-2 text-slate-50 hover:border-amber-500 transition-all active:scale-95">
-                <Apple class="w-4 h-4" />
-                <span>{{ $t('landing.app_store_placeholder') }}</span>
+                class="flex-1 active:scale-95 transition-all">
+                <img src="/app_store_badge.png" alt="Download on the App Store" class="h-full w-full object-contain" />
               </a>
             </div>
 
