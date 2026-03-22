@@ -539,13 +539,14 @@ const resetApp = (forceLanding = false) => {
 
 
           <div class="mt-16 flex flex-col items-center gap-6">
-            <div class="flex items-center gap-8 text-slate-600 font-bold text-[10px] uppercase tracking-[0.2em]">
+            <div class="flex items-center justify-center flex-wrap gap-4 md:gap-8 text-slate-600 font-bold text-[10px] uppercase tracking-[0.2em]">
               <button @click="showInfo = 'privacy'" class="hover:text-amber-500 transition-colors">{{ $t('landing.privacy')
                 }}</button>
               <button @click="showInfo = 'terms'" class="hover:text-amber-500 transition-colors">{{ $t('landing.terms')
                 }}</button>
               <button @click="showInfo = 'support'" class="hover:text-amber-500 transition-colors">{{ $t('landing.email')
                 }}</button>
+              <a href="/blog/index.html" class="hover:text-amber-500 transition-colors">BLOG & GUIDES</a>
             </div>
 
             <div class="text-[9px] font-black text-slate-800 uppercase tracking-[0.2em] flex items-center gap-2">
