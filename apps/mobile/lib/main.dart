@@ -678,10 +678,17 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icons.wifi_tethering,
             color: kPrimaryColor,
             textColor: Colors.black,
-            onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => BroadcastScreen(isPro: _isPro))),
+            onTap: () async {
+                final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => BroadcastScreen(isPro: _isPro)));
+                
+                // If the user clicked "Upgrade" after the time limit, show the dialog
+                if (result == true && mounted) {
+                  _showProDialog();
+                }
+              },
           ),
           const SizedBox(height: 16),
           _buildActionButton(
@@ -984,7 +991,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   String? _peerId;
   bool _isScreenSharing = false;
   final List<DataConnection> _connections = [];
-  bool _isMuted = false;
+  bool _isMuted = true;
   bool _isLoading = false;
 
   // Time Limit Logic
@@ -1048,7 +1055,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     await _stopBroadcast();
   }
 
-  Future<void> _stopBroadcast() async {
+  Future<void> _stopBroadcast({dynamic result}) async {
     if (!mounted) return;
     if (!_isStopping) {
       setState(() => _isStopping = true);
@@ -1077,7 +1084,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
     if (mounted) {
       if (Navigator.canPop(context)) {
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(result);
       }
 
       // Optional: Reset state if not popped (shouldn't happen if pushed correctly)
@@ -1253,6 +1260,13 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       _localRenderer.srcObject = _localStream;
       _isScreenSharing = isScreen;
 
+      // Apply default mute status
+      if (_localStream != null) {
+        for (var track in _localStream!.getAudioTracks()) {
+          track.enabled = !_isMuted;
+        }
+      }
+
       // 3. Initialize Peer AFTER stream is acquired with robust ICE config
       final peer = Peer(
           id: code,
@@ -1422,8 +1436,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
-                        Navigator.pop(ctx);
-                        _handleExit();
+                        Navigator.pop(ctx); // Close the dialog
+                        _stopBroadcast(result: true); // Close screen and signal upgrade
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: kPrimaryColor,
@@ -1674,28 +1688,39 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text("SHARING ACCESS KEY",
-                                style: TextStyle(
-                                    color: kTextSecondary,
-                                    letterSpacing: 2,
-                                    fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            RichText(
-                              textAlign: TextAlign.center,
-                              text: const TextSpan(
-                                style: TextStyle(
-                                    color: Colors.white70, fontSize: 13),
-                                children: [
-                                  TextSpan(text: "Browser receiver: "),
-                                  TextSpan(
-                                    text: "castnow.vercel.app",
-                                    style: TextStyle(
-                                        color: kPrimaryColor,
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                            ),
+                             const Text("SHARING ACCESS KEY",
+                                 style: TextStyle(
+                                     color: kTextSecondary,
+                                     letterSpacing: 2,
+                                     fontSize: 11,
+                                     fontWeight: FontWeight.bold)),
+                             const SizedBox(height: 16),
+                             Container(
+                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                               decoration: BoxDecoration(
+                                 color: Colors.black26,
+                                 borderRadius: BorderRadius.circular(12),
+                                 border: Border.all(color: kPrimaryColor.withOpacity(0.2)),
+                               ),
+                               child: Column(
+                                 children: [
+                                   const Text("Open this website on your computer",
+                                       style: TextStyle(color: Colors.white54, fontSize: 11)),
+                                   const SizedBox(height: 6),
+                                   const FittedBox(
+                                     fit: BoxFit.scaleDown,
+                                     child: Text(
+                                       "https://castnow.vercel.app",
+                                       style: TextStyle(
+                                           color: kPrimaryColor,
+                                           fontSize: 16,
+                                           fontWeight: FontWeight.w900,
+                                           letterSpacing: 0.5),
+                                     ),
+                                   ),
+                                 ],
+                               ),
+                             ),
                             const SizedBox(height: 16),
                             FittedBox(
                               fit: BoxFit.scaleDown,

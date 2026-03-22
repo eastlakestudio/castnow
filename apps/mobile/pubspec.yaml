@@ -2,7 +2,7 @@
 name: castnow_app
 description: "CastNow Mobile Client - Native P2P Screen Sharing"
 publish_to: 'none'
-version: 1.1.0+3
+version: 1.1.0+4
 
 environment:
   sdk: '>=3.2.3 <4.0.0'
