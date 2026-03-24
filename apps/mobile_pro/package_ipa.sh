@@ -33,4 +33,10 @@ echo "------------------------------------------------"
 echo "IPA Export Success!"
 echo "Destination: $EXPORT_PATH"
 echo "------------------------------------------------"
+
+# Rename the IPA to castnow_pro_mobile.ipa
+if [ -f "$EXPORT_PATH/castnow_mobile.ipa" ]; then
+    mv "$EXPORT_PATH/castnow_mobile.ipa" "$EXPORT_PATH/castnow_pro_mobile.ipa"
+fi
+
 ls -lh "$EXPORT_PATH"

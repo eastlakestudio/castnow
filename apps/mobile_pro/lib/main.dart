@@ -1,6 +1,7 @@
 // ignore_for_file: deprecated_member_use
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -411,7 +412,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       _peer!.on("open").listen((id) => setState(() { _peerId = id; _isLoading = false; }));
       _peer!.on("connection").listen((conn) {
         if (_isScreenSharing && Platform.isAndroid) const MethodChannel('castnow_picker').invokeMethod('minimizeApp');
-        _peer!.call(conn.peer, _localStream!);
+        
+        if (_localStream != null && _localStream!.getTracks().isNotEmpty) {
+          _peer!.call(conn.peer, _localStream!);
+        }
+        
         setState(() => _isConnected = true);
         _exchangeDeviceInfo(conn);
       });
@@ -435,13 +440,40 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     if (Platform.isIOS) { model = (await devInfo.iosInfo).name; }
     else { model = (await devInfo.androidInfo).model; }
     
-    conn.send({"type": "dev", "os": os, "model": model});
-    conn.on("data").listen((data) {
-      if (data is Map && data["type"] == "dev") {
-        String info = "${data['os']} ${data['model'] ?? ''}";
-        if (data['browser'] != null) info += " (${data['browser']})";
-        setState(() => _remoteDeviceInfo = info.trim());
-      }
+    _remoteDeviceInfo = null;
+    debugPrint("PREPARING EXCHANGE for conn: ${conn.connectionId}");
+    
+    // PeerDart: Best practice is to listen for 'open' before using the channel
+    conn.on("open").listen((_) {
+      debugPrint("DC OPENED for ${conn.connectionId}. Sending app info...");
+      
+      final infoStr = jsonEncode({"type": "dev", "os": os, "model": model});
+      conn.send(infoStr);
+      
+      conn.on("data").listen((data) {
+        debugPrint("RECEIVED DATA (Type: ${data.runtimeType}): $data");
+        dynamic payload = data;
+        if (data is String) {
+          try {
+            payload = jsonDecode(data);
+          } catch (e) {
+            debugPrint("JSON Decode Error: $e");
+          }
+        }
+        
+        if (payload is Map && payload["type"] == "dev") {
+          String info = "${payload['os']} ${payload['model'] ?? ''}";
+          if (payload['browser'] != null) info += " (${payload['browser']})";
+          setState(() => _remoteDeviceInfo = info.trim());
+          debugPrint("SUCCESSFULLY SET _remoteDeviceInfo: $_remoteDeviceInfo");
+        }
+      });
+    });
+    conn.on("close").listen((_) {
+      if (mounted) setState(() { _isConnected = false; _remoteDeviceInfo = null; });
+    });
+    conn.on("error").listen((_) {
+      if (mounted) setState(() { _isConnected = false; _remoteDeviceInfo = null; });
     });
   }
 
@@ -549,7 +581,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                             decoration: BoxDecoration(color: kPrimaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: kPrimaryColor.withOpacity(0.3))),
                             child: Text(char, style: const TextStyle(color: kPrimaryColor, fontSize: 32, fontWeight: FontWeight.bold)),
                           )).toList()),
-                           const Text("Open castnow.vercel.app on your computer to receive", style: TextStyle(color: Colors.white38, fontSize: 10, fontStyle: FontStyle.italic)),
+                          if (!_isConnected) ...[
+                            const SizedBox(height: 12),
+                            const Text("Open castnow.vercel.app on your computer to receive", style: TextStyle(color: Colors.white38, fontSize: 10, fontStyle: FontStyle.italic)),
+                          ],
                            const SizedBox(height: 24),
                         ],
                       ),

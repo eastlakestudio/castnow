@@ -58,6 +58,7 @@ const remoteVideo = ref(null);
 const isMuted = ref(false);
 const showControls = ref(true);
 const showEndedDialog = ref(false);
+const remoteDeviceInfo = ref(""); // Metadata from Broadcaster
 const showInfo = ref(null); // 'source', 'privacy', 'terms'
 const showProModal = ref(false);
 const showFirefoxGuide = ref(false);
@@ -129,9 +130,7 @@ const isTouchDevice = computed(() => {
 
 const isMobile = computed(() => {
   if (typeof navigator === "undefined") return false;
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent,
-  );
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 });
 
 const getOS = () => {
@@ -346,16 +345,31 @@ const handleJoin = () => {
 
   peerInstance.value = peer;
 
-  peer.on("open", () => {
-    // 1. Connect to Broadcaster (Signal intent)
-    const conn = peer.connect(joinCode.value);
+    peer.on("open", () => {
+      const conn = peer.connect(joinCode.value);
 
-    conn.on("open", () => {
-      console.log("Connected to broadcaster signaling");
-      conn.send(getDeviceInfo()); // Send device info to broadcaster
-      appState.value = STATES.RECEIVER_ACTIVE;
-      isConnecting.value = false;
-    });
+      conn.on("open", () => {
+        console.log("DataConnection OPEN: Connected to App", conn.peer);
+        const infoStr = JSON.stringify(getDeviceInfo());
+        console.log("SENDING STRINGIFIED OBJECT:", infoStr);
+        conn.send(infoStr);
+        
+        setTimeout(() => conn.send(infoStr), 2000); 
+        appState.value = STATES.RECEIVER_ACTIVE;
+        isConnecting.value = false;
+      });
+
+      conn.on("data", (data) => {
+        console.log("RECEIVED FROM APP:", data);
+        try {
+          const payload = typeof data === "string" ? JSON.parse(data) : data;
+          if (payload && payload.type === "dev") {
+            remoteDeviceInfo.value = `${payload.os} ${payload.model || ""}`.trim();
+          }
+        } catch (e) {
+          console.error("Data Parse Error:", e, data);
+        }
+      });
 
     conn.on("error", (err) => {
       console.error("Connection Error", err);
@@ -809,7 +823,12 @@ const resetApp = (forceLanding = false) => {
                 <span class="text-red-500 text-[10px] font-black uppercase tracking-widest">{{ $t('active.live_feed')
                   }}</span>
               </div>
-              <h3 class="text-white font-bold text-lg">{{ $t('active.stream_title') }}</h3>
+              <h3 class="text-white font-bold text-lg">
+                {{ $t('active.stream_title') }}
+                <span v-if="remoteDeviceInfo" class="ml-2 text-[10px] text-slate-400 font-medium bg-white/5 px-2 py-0.5 rounded-full border border-white/10 uppercase tracking-wider">
+                  {{ remoteDeviceInfo }}
+                </span>
+              </h3>
             </div>
 
 
