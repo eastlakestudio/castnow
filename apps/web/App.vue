@@ -134,6 +134,31 @@ const isMobile = computed(() => {
   );
 });
 
+});
+
+const getOS = () => {
+  const ua = navigator.userAgent;
+  if (/Windows/i.test(ua)) return "Windows";
+  if (/Mac/i.test(ua)) return "macOS";
+  if (/Linux/i.test(ua)) return "Linux";
+  if (/Android/i.test(ua)) return "Android";
+  if (/iPhone|iPad|iPod/i.test(ua)) return "iOS";
+  return "System";
+};
+
+const getBrowser = () => {
+  const ua = navigator.userAgent;
+  if (/Chrome/i.test(ua)) return "Chrome";
+  if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) return "Safari";
+  if (/Firefox/i.test(ua)) return "Firefox";
+  if (/Edg/i.test(ua)) return "Edge";
+  return "Browser";
+};
+
+const getDeviceInfo = () => {
+  return { type: "dev", os: getOS(), browser: getBrowser() };
+};
+
 // --- WebRTC Core ---
 const getIceServers = () => {
   const isChina = () => {
@@ -329,6 +354,7 @@ const handleJoin = () => {
 
     conn.on("open", () => {
       console.log("Connected to broadcaster signaling");
+      conn.send(getDeviceInfo()); // Send device info to broadcaster
       appState.value = STATES.RECEIVER_ACTIVE;
       isConnecting.value = false;
     });
