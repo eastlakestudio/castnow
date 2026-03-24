@@ -134,8 +134,6 @@ const isMobile = computed(() => {
   );
 });
 
-});
-
 const getOS = () => {
   const ua = navigator.userAgent;
   if (/Windows/i.test(ua)) return "Windows";
