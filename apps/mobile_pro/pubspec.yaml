@@ -2,7 +2,7 @@
 name: castnow_pro
 description: "CastNow Pro - Unlimited P2P Screen Sharing"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+4
 
 environment:
   sdk: '>=3.2.3 <4.0.0'

@@ -5,9 +5,9 @@
 	<key>CFBundleDisplayName</key>
 	<string>CastNow Screen Share</string>
 	<key>CFBundleShortVersionString</key>
-	<string>$(FLUTTER_BUILD_NAME)</string>
+	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
-	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<string>4</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>
@@ -18,7 +18,7 @@
 		<string>RPBroadcastProcessModeSampleBuffer</string>
 	</dict>
 	<key>RTCAppGroupIdentifier</key>
-	<string>group.com.eastlakestudio.castnow.app</string>
+	<string>group.com.eastlakestudio.castnow.pro</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Microphone access is needed for audio streaming during screen sharing.</string>
 </dict>

@@ -99,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (url != null)
             TextButton(
               onPressed: () => _launchURL(url),
-              child: Text(urlText ?? "VIEW ON GITHUB",
+              child: Text(urlText ?? "OPEN",
                   style: const TextStyle(
                       color: kPrimaryColor, fontWeight: FontWeight.bold)),
             ),
@@ -199,12 +199,14 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               TextSpan(text: 'Cast'),
               TextSpan(text: 'Now', style: TextStyle(color: kPrimaryColor)),
+              TextSpan(text: ' Pro', style: TextStyle(fontSize: 24, color: Colors.cyanAccent)),
             ],
           ),
         ),
         const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             const Icon(Icons.language_rounded, color: kTextSecondary, size: 14),
             const SizedBox(width: 6),
@@ -252,20 +254,47 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              children: [
-                const SizedBox(height: 40),
-                isLandscape 
-                  ? Row(children: [Expanded(child: brandSection), const SizedBox(width: 40), Expanded(child: actionsSection)])
-                  : Column(children: [brandSection, const SizedBox(height: 60), actionsSection]),
-                const SizedBox(height: 80),
-                _buildFooterLinks(context),
-              ],
-            ),
-          ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth > 700;
+            final horizontalPadding = isWide ? 40.0 : 24.0;
+            
+            return Center(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: EdgeInsets.all(horizontalPadding),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1000),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 20),
+                        isWide 
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(child: brandSection),
+                                Container(width: 1, height: 180, color: Colors.white10, margin: const EdgeInsets.symmetric(horizontal: 40)),
+                                Expanded(child: actionsSection),
+                              ],
+                            )
+                          : Column(
+                              children: [
+                                brandSection,
+                                const SizedBox(height: 60),
+                                actionsSection,
+                              ],
+                            ),
+                        const SizedBox(height: 100),
+                        _buildFooterLinks(context),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -274,14 +303,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildFooterLinks(BuildContext context) {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 32,
+          runSpacing: 12,
           children: [
-            _buildFooterLink(context, "SUPPORT", "Contact Support", "mingh.liu@gmail.com", url: "mailto:mingh.liu@gmail.com"),
-            const SizedBox(width: 32),
-            _buildFooterLink(context, "PRIVACY", "Privacy Policy", "Data is peer-to-peer and never stored."),
-            const SizedBox(width: 32),
-            _buildFooterLink(context, "TERMS", "Terms of Service", "Use at your own responsibility."),
+            _buildFooterLink(context, "SUPPORT", "Support & Feedback", "Need help or have a suggestion?\n\nOur team is dedicated to providing you with the best screen-sharing experience. If you encounter any issues or have ideas for new features, please don't hesitate to reach out.\n\nContact us at:\nmingh.liu@gmail.com", url: "mailto:mingh.liu@gmail.com", urlText: "SEND EMAIL"),
+            _buildFooterLink(context, "PRIVACY", "Privacy Policy", "Your privacy is our top priority:\n\n1. P2P Technology: Data is transmitted directly between devices. No content ever passes through or is stored on our servers.\n2. No Personal Data: We do not collect your identity, contacts, or location.\n3. Zero Logs: We don't track your sessions or metadata.\n4. Local Device: Permissions are only used locally for broadcasting."),
+            _buildFooterLink(context, "TERMS", "Terms of Service", "By using CastNow Pro, you agree to:\n\n1. Lawful Use: No illegal or harmful content.\n2. License: One-time purchase for personal/pro use.\n3. Disclaimer: Software provided 'as is'.\n4. Updates: Continuous improvements without guaranteed network-specific performance."),
           ],
         ),
         const SizedBox(height: 16),
@@ -290,9 +319,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildFooterLink(BuildContext context, String label, String title, String content, {String? url}) {
+  Widget _buildFooterLink(BuildContext context, String label, String title, String content, {String? url, String? urlText}) {
     return GestureDetector(
-      onTap: () => _showInfoDialog(context, title, content, url: url),
+      onTap: () => _showInfoDialog(context, title, content, url: url, urlText: urlText),
       child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
     );
   }
@@ -308,10 +337,12 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: isOutlined ? Colors.white.withOpacity(0.05) : Colors.black12, borderRadius: BorderRadius.circular(16)), child: Icon(icon, color: textColor, size: 28)),
             const SizedBox(width: 20),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold)),
-              Text(subtitle, style: TextStyle(color: textColor.withOpacity(0.7), fontSize: 12)),
-            ]),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(subtitle, style: TextStyle(color: textColor.withOpacity(0.7), fontSize: 12)),
+              ]),
+            ),
             const Spacer(),
             Icon(Icons.arrow_forward_ios_rounded, color: textColor.withOpacity(0.5), size: 16),
           ],
@@ -752,7 +783,14 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           TextField(
             controller: _codeController, textAlign: TextAlign.center, maxLength: 6, keyboardType: TextInputType.number,
             style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: kPrimaryColor, letterSpacing: 8),
-            decoration: InputDecoration(filled: true, fillColor: kSurfaceColor, border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none), hintText: "000000"),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: kSurfaceColor,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+              hintText: "Enter 6-digit access code",
+              hintStyle: TextStyle(color: kTextSecondary.withOpacity(0.3), fontSize: 16, letterSpacing: 0),
+              counterText: "",
+            ),
           ),
           const SizedBox(height: 32),
           SizedBox(width: double.infinity, height: 60, child: ElevatedButton(onPressed: _join, child: _isConnecting ? const CircularProgressIndicator() : const Text("CONNECT"))),
