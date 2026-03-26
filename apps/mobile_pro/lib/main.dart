@@ -614,7 +614,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                           )).toList()),
                           if (!_isConnected) ...[
                             const SizedBox(height: 12),
-                            const Text("Open castnow.vercel.app on your computer to receive", style: TextStyle(color: Colors.white38, fontSize: 10, fontStyle: FontStyle.italic)),
+                            const Text("Open castnow.vercel.app on another device to receive", style: TextStyle(color: Colors.white38, fontSize: 10, fontStyle: FontStyle.italic)),
                           ],
                            const SizedBox(height: 24),
                         ],

@@ -562,7 +562,7 @@ const resetApp = (forceLanding = false) => {
                   <span class="text-xs font-black text-slate-100 uppercase tracking-tight">Android APK</span>
                 </div>
               </a>
-              <a href="https://apps.apple.com/us/app/castnow-p2p-screen-sharing/id6759210431" target="_blank"
+              <a href="https://apps.apple.com/us/app/castnow-pro/id6761016081" target="_blank"
                 class="flex-1 min-w-[140px] h-11 bg-black border border-slate-800 rounded-xl hover:border-amber-500 transition-all flex items-center px-4 gap-3 group active:scale-95">
                 <Apple class="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
                 <div class="flex flex-col items-start leading-none">
