@@ -85,7 +85,7 @@ class SocketConnection {
 class SampleHandler: RPBroadcastSampleHandler {
     
     private var client: SocketConnection?
-    private let appGroupIdentifier = "group.com.eastlakestudio.castnow.app"
+    private let appGroupIdentifier = "group.com.eastlakestudio.castnow.pro"
     private var imageContext = CIContext(options: [
         CIContextOption.useSoftwareRenderer: false,
         CIContextOption.priorityRequestLow: true
@@ -155,7 +155,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         connectionTimer?.invalidate()
         connectionTimer = nil
         // Using NSLocalizedFailureReasonErrorKey to customize the system alert message
-        let error = NSError(domain: "CastNow", code: 0, userInfo: [NSLocalizedFailureReasonErrorKey: "直播已由宿主应用正常结束"])
+        let error = NSError(domain: "CastNow", code: 0, userInfo: [NSLocalizedFailureReasonErrorKey: "Broadcast has been ended by the host application."])
         finishBroadcastWithError(error)
     }
     

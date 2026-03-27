@@ -204,21 +204,42 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Wrap(
-          alignment: WrapAlignment.center,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            const Icon(Icons.language_rounded, color: kTextSecondary, size: 14),
-            const SizedBox(width: 6),
-            const Text("Receive on: ", style: TextStyle(color: kTextSecondary, fontSize: 12)),
-            GestureDetector(
-              onTap: () => _launchURL("https://castnow.vercel.app"),
-              child: Container(
-                decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kPrimaryColor, width: 0.8))),
-                child: const Text("castnow.vercel.app", style: TextStyle(color: kPrimaryColor, fontSize: 12, fontWeight: FontWeight.bold)),
+        Container(
+          margin: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.cyanAccent.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.cyanAccent.withOpacity(0.2)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.language_rounded, color: Colors.cyanAccent, size: 16),
+              const SizedBox(width: 8),
+              const Text(
+                "Receive on: ",
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+              GestureDetector(
+                onTap: () => _launchURL("https://castnow.vercel.app"),
+                child: const Text(
+                  "castnow.vercel.app",
+                  style: TextStyle(
+                    color: Colors.cyanAccent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                    decorationColor: Colors.cyanAccent,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -418,7 +439,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           }
           await const MethodChannel('castnow_picker').invokeMethod('startMediaProjectionService', {'type': 'mediaProjection', 'code': code});
         }
-        _localStream = await navigator.mediaDevices.getDisplayMedia({'audio': false});
+        if (Platform.isIOS) {
+          _localStream = await navigator.mediaDevices.getDisplayMedia({
+            'video': {'deviceId': 'broadcast'},
+            'audio': false
+          });
+        } else {
+          _localStream = await navigator.mediaDevices.getDisplayMedia({'audio': false});
+        }
       } else {
         if (!kIsWeb) {
           await Permission.camera.request();
@@ -439,26 +467,46 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         }
       }
 
-      _peer = Peer(id: code, options: PeerOptions(debug: LogLevel.All, config: {'iceServers': [{'urls': 'stun:stun.l.google.com:19302'}]}));
+      _peer = Peer(id: code, options: PeerOptions(debug: LogLevel.All, config: {
+        'iceServers': [
+          {'urls': 'stun:stun.l.google.com:19302'},
+          {'urls': 'stun:stun.cloudflare.com:3478'},
+          {'urls': 'stun:stun.miwifi.com:3478'},
+          {'urls': 'stun:stun.cdn.aliyun.com:3478'},
+        ]
+      }));
       _peer!.on("open").listen((id) => setState(() { _peerId = id; _isLoading = false; }));
       _peer!.on("connection").listen((conn) {
+        _exchangeDeviceInfo(conn);
         if (_isScreenSharing && Platform.isAndroid) const MethodChannel('castnow_picker').invokeMethod('minimizeApp');
         
         if (_localStream != null && _localStream!.getTracks().isNotEmpty) {
-          _peer!.call(conn.peer, _localStream!);
+          final mediaConnection = _peer!.call(conn.peer, _localStream!);
+          mediaConnection.peerConnection?.onIceConnectionState = (state) {
+            debugPrint("🔥 [ICE Connection State]: ${state.toString()}");
+          };
         }
-        
         setState(() => _isConnected = true);
-        _exchangeDeviceInfo(conn);
       });
 
       if (!widget.isPro) {
         _limitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          if (!mounted) { timer.cancel(); return; }
-          setState(() { if (_remainingSeconds > 0) _remainingSeconds--; else { timer.cancel(); _showTimeUpDialog(); } });
+          if (!mounted) {
+            timer.cancel();
+            return;
+          }
+          setState(() {
+            if (_remainingSeconds > 0) {
+              _remainingSeconds--;
+            } else {
+              timer.cancel();
+              _showTimeUpDialog();
+            }
+          });
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
@@ -474,36 +522,95 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     _remoteDeviceInfo = null;
     debugPrint("PREPARING EXCHANGE for conn: ${conn.connectionId}");
     
-    // PeerDart: Best practice is to listen for 'open' before using the channel
-    conn.on("open").listen((_) {
-      debugPrint("DC OPENED for ${conn.connectionId}. Sending app info...");
+    // Function to send data consistently
+    void sendInfo() {
+      debugPrint("Sending app info to DC ${conn.connectionId}...");
+      conn.send({"type": "dev", "os": os, "model": model});
+    }
+
+    // PeerDart: listen for 'data' regardless of 'open' state to avoid missing initial packets
+    conn.on("data").listen((data) {
+      debugPrint("RAW DATA RECEIVED on DC ${conn.connectionId} (Type: ${data.runtimeType}): $data");
       
-      final infoStr = jsonEncode({"type": "dev", "os": os, "model": model});
-      conn.send(infoStr);
+      if (data == null) {
+        debugPrint("⚠️ WARNING: RECEIVED NULL DATA on DC ${conn.connectionId}. This often indicates a serialization mismatch.");
+        return;
+      }
       
-      conn.on("data").listen((data) {
-        debugPrint("RECEIVED DATA (Type: ${data.runtimeType}): $data");
-        dynamic payload = data;
-        if (data is String) {
-          try {
-            payload = jsonDecode(data);
-          } catch (e) {
-            debugPrint("JSON Decode Error: $e");
-          }
-        }
-        
-        if (payload is Map && payload["type"] == "dev") {
-          String info = "${payload['os']} ${payload['model'] ?? ''}";
-          if (payload['browser'] != null) info += " (${payload['browser']})";
-          setState(() => _remoteDeviceInfo = info.trim());
-          debugPrint("SUCCESSFULLY SET _remoteDeviceInfo: $_remoteDeviceInfo");
-        }
-      });
+      dynamic payload = data;
+      if (data is String) {
+        try { payload = jsonDecode(data); } catch (e) { debugPrint("JSON Decode Error: $e"); }
+      }
+      
+      if (payload is Map && payload["type"] == "dev") {
+        String info = "${payload['os']} ${payload['model'] ?? ''}";
+        if (payload['browser'] != null) info += " (${payload['browser']})";
+        setState(() => _remoteDeviceInfo = info.trim());
+        debugPrint("SUCCESSFULLY SET _remoteDeviceInfo: $_remoteDeviceInfo");
+      }
     });
+
+    // Fallback for binary data if Web side still sends binary (e.g. cache or old version)
+    conn.on("binary").listen((bytes) {
+      debugPrint("BINARY DATA RECEIVED (${bytes.length} bytes).");
+      try {
+        final str = utf8.decode(bytes);
+        debugPrint("DECODED BINARY TO STRING: $str");
+        final payload = jsonDecode(str);
+        if (payload is Map && payload["type"] == "dev") {
+           String info = "${payload['os']} ${payload['model'] ?? ''}";
+           if (payload['browser'] != null) info += " (${payload['browser']})";
+           if (_remoteDeviceInfo == null) setState(() => _remoteDeviceInfo = info.trim());
+        }
+      } catch (e) {
+        debugPrint("Binary decode as UTF-8 failed: $e. Message is likely msgpack/binary.");
+      }
+    });
+    
+    // Low-level fail-safe: Reach into RTCDataChannel if it's available
+    try {
+      final dc = (conn as dynamic).dataChannel as RTCDataChannel?;
+      if (dc != null) {
+        dc.onMessage = (message) {
+          debugPrint("LOWEST-LEVEL DC MESSAGE RECEIVED - Binary: ${message.isBinary}, Length: ${message.binary?.length ?? message.text?.length}");
+          if (!message.isBinary && message.text != null && _remoteDeviceInfo == null) {
+            try {
+              final payload = jsonDecode(message.text!);
+              if (payload is Map && payload["type"] == "dev") {
+                String info = "${payload['os']} ${payload['model'] ?? ''}";
+                if (payload['browser'] != null) info += " (${payload['browser']})";
+                setState(() => _remoteDeviceInfo = info.trim());
+              }
+            } catch (_) {}
+          } else if (message.isBinary && _remoteDeviceInfo == null) {
+             // Try one more time to decode the binary message directly from RTCDataChannelMessage
+             try {
+                final str = utf8.decode(message.binary!);
+                final payload = jsonDecode(str);
+                if (payload is Map && payload["type"] == "dev") {
+                   String info = "${payload['os']} ${payload['model'] ?? ''}";
+                   if (payload['browser'] != null) info += " (${payload['browser']})";
+                   setState(() => _remoteDeviceInfo = info.trim());
+                }
+             } catch (_) {}
+          }
+        };
+      }
+    } catch (_) {}
+
+    // Handle connection lifecycle
+    if (conn.open) {
+      sendInfo();
+    } else {
+      conn.on("open").listen((_) => sendInfo());
+    }
+
     conn.on("close").listen((_) {
       if (mounted) setState(() { _isConnected = false; _remoteDeviceInfo = null; });
     });
-    conn.on("error").listen((_) {
+    
+    conn.on("error").listen((err) {
+      debugPrint("DC ERROR (${conn.connectionId}): $err");
       if (mounted) setState(() { _isConnected = false; _remoteDeviceInfo = null; });
     });
   }
@@ -593,7 +700,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                   Padding(
                     padding: const EdgeInsets.all(24.0),
                     child: Container(
-                      height: MediaQuery.of(context).size.height * 0.4,
+                      height: MediaQuery.of(context).size.height * 0.35,
                       decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white10)),
                       clipBehavior: Clip.antiAlias,
                       child: _localStream != null ? RTCVideoView(_localRenderer, mirror: !_isScreenSharing) : Container(),
@@ -614,7 +721,41 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                           )).toList()),
                           if (!_isConnected) ...[
                             const SizedBox(height: 12),
-                            const Text("Open castnow.vercel.app on another device to receive", style: TextStyle(color: Colors.white38, fontSize: 10, fontStyle: FontStyle.italic)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.cyanAccent.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.cyanAccent.withOpacity(0.4), width: 1.5),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.info_outline, color: Colors.cyanAccent, size: 18),
+                                  const SizedBox(width: 10),
+                                  RichText(
+                                    text: const TextSpan(
+                                      style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                                      children: [
+                                        TextSpan(text: "Open "),
+                                        TextSpan(
+                                          text: "castnow.vercel.app", 
+                                          style: TextStyle(
+                                            color: Colors.cyanAccent, 
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w900, 
+                                            decoration: TextDecoration.underline,
+                                            decorationColor: Colors.cyanAccent,
+                                            letterSpacing: 0.5
+                                          )
+                                        ),
+                                        TextSpan(text: " to receive"),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                            const SizedBox(height: 24),
                         ],
@@ -733,12 +874,27 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     if (Platform.isIOS) { model = (await devInfo.iosInfo).name; }
     else { model = (await devInfo.androidInfo).model; }
     
-    conn.send({"type": "dev", "os": os, "model": model});
+    void sendInfo() {
+      final infoStr = jsonEncode({"type": "dev", "os": os, "model": model});
+      conn.send(infoStr);
+    }
+    
     conn.on("data").listen((data) {
-      if (data is Map && data["type"] == "dev") {
-        setState(() => _remoteDeviceInfo = "${data['os']} ${data['model']}");
+      if (data == null) return;
+      dynamic payload = data;
+      if (data is String) {
+        try { payload = jsonDecode(data); } catch (_) {}
+      }
+      if (payload is Map && payload["type"] == "dev") {
+        setState(() => _remoteDeviceInfo = "${payload['os']} ${payload['model'] ?? ''}");
       }
     });
+    
+    if (conn.open) {
+      sendInfo();
+    } else {
+      conn.on("open").listen((_) => sendInfo());
+    }
   }
 
   @override

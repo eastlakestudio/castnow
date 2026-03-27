@@ -633,35 +633,42 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.language_rounded, color: kTextSecondary, size: 14),
-            const SizedBox(width: 6),
-            const Text(
-              "Receive on: ",
-              style: TextStyle(color: kTextSecondary, fontSize: 12),
-            ),
-            GestureDetector(
-              onTap: () => _launchURL("https://castnow.vercel.app"),
-              child: Container(
-                padding: const EdgeInsets.only(bottom: 2), // Spacing
-                decoration: const BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: kPrimaryColor, width: 0.8),
-                  ),
+        Container(
+          margin: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.cyanAccent.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.cyanAccent.withOpacity(0.2)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.language_rounded, color: Colors.cyanAccent, size: 16),
+              const SizedBox(width: 8),
+              const Text(
+                "Receive on: ",
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
+              ),
+              GestureDetector(
+                onTap: () => _launchURL("https://castnow.vercel.app"),
                 child: const Text(
                   "castnow.vercel.app",
                   style: TextStyle(
-                    color: kPrimaryColor,
-                    fontSize: 12,
+                    color: Colors.cyanAccent,
+                    fontSize: 13,
                     fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                    decorationColor: Colors.cyanAccent,
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -1291,9 +1298,13 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           channel0.invokeMethod('minimizeApp');
         }
 
+        // --- DataChannel Handshake ---
+        _exchangeDeviceInfo(conn);
+
         // Active call to receiver
         if (_localStream != null) {
           final mediaConnection = _peer!.call(conn.peer, _localStream!);
+          // ...
 
           // --- ICE Debug Logs ---
           mediaConnection.peerConnection?.onIceConnectionState =
@@ -1359,6 +1370,100 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     }
   }
 
+  void _exchangeDeviceInfo(DataConnection conn) async {
+    final devInfo = DeviceInfoPlugin();
+    String os = Platform.isIOS ? "iOS" : "Android";
+    String model = "Device";
+    if (Platform.isIOS) { model = (await devInfo.iosInfo).name; }
+    else { model = (await devInfo.androidInfo).model; }
+    
+    _remoteDeviceInfo = null;
+    debugPrint("PREPARING EXCHANGE for conn: ${conn.connectionId}");
+    
+    void sendInfo() {
+      debugPrint("Sending app info to DC ${conn.connectionId}...");
+      conn.send({"type": "dev", "os": os, "model": model});
+    }
+
+    conn.on("data").listen((data) {
+      debugPrint("RAW DATA RECEIVED on DC ${conn.connectionId} (Type: ${data.runtimeType}): $data");
+      if (data == null) {
+        debugPrint("⚠️ WARNING: RECEIVED NULL DATA on DC ${conn.connectionId}.");
+        return;
+      }
+      
+      dynamic payload = data;
+      if (data is String) {
+        try { payload = jsonDecode(data); } catch (e) { debugPrint("JSON Decode Error: $e"); }
+      }
+      
+      if (payload is Map && payload["type"] == "dev") {
+        String info = "${payload['os']} ${payload['model'] ?? ''}";
+        if (payload['browser'] != null) info += " (${payload['browser']})";
+        setState(() => _remoteDeviceInfo = info.trim());
+      }
+    });
+
+    // Fallback for binary data
+    conn.on("binary").listen((bytes) {
+      debugPrint("BINARY DATA RECEIVED (${bytes.length} bytes).");
+      try {
+        final str = utf8.decode(bytes);
+        debugPrint("DECODED BINARY TO STRING: $str");
+        final payload = jsonDecode(str);
+        if (payload is Map && payload["type"] == "dev") {
+           String info = "${payload['os']} ${payload['model'] ?? ''}";
+           if (payload['browser'] != null) info += " (${payload['browser']})";
+           if (_remoteDeviceInfo == null) setState(() => _remoteDeviceInfo = info.trim());
+        }
+      } catch (e) {
+        debugPrint("Binary decode as UTF-8 failed: $e. Message is likely msgpack/binary.");
+      }
+    });
+    
+    // Low-level fail-safe: Reach into RTCDataChannel if it's available
+    try {
+      final dc = (conn as dynamic).dataChannel as RTCDataChannel?;
+      if (dc != null) {
+        dc.onMessage = (message) {
+          debugPrint("LOWEST-LEVEL DC MESSAGE RECEIVED - Binary: ${message.isBinary}, Length: ${message.binary?.length ?? message.text?.length}");
+          if (!message.isBinary && message.text != null && _remoteDeviceInfo == null) {
+            try {
+              final payload = jsonDecode(message.text!);
+              if (payload is Map && payload["type"] == "dev") {
+                String info = "${payload['os']} ${payload['model'] ?? ''}";
+                if (payload['browser'] != null) info += " (${payload['browser']})";
+                setState(() => _remoteDeviceInfo = info.trim());
+              }
+            } catch (_) {}
+          } else if (message.isBinary && _remoteDeviceInfo == null) {
+             // Try one more time to decode the binary message directly from RTCDataChannelMessage
+             try {
+                final str = utf8.decode(message.binary!);
+                final payload = jsonDecode(str);
+                if (payload is Map && payload["type"] == "dev") {
+                   String info = "${payload['os']} ${payload['model'] ?? ''}";
+                   if (payload['browser'] != null) info += " (${payload['browser']})";
+                   setState(() => _remoteDeviceInfo = info.trim());
+                }
+             } catch (_) {}
+          }
+        };
+      }
+    } catch (_) {}
+
+    if (conn.open) {
+      sendInfo();
+    } else {
+      conn.on("open").listen((_) => sendInfo());
+    }
+
+    conn.on("close").listen((_) {
+      if (mounted) setState(() { _remoteDeviceInfo = null; });
+    });
+  }
+
+  String? _remoteDeviceInfo;
   void _switchCamera() async {
     if (_localStream != null && !_isScreenSharing) {
       final tracks = _localStream!.getVideoTracks();
@@ -1650,7 +1755,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 24.0),
                       child: Container(
                         width: isLandscape ? 400 : double.infinity,
-                        height: MediaQuery.of(context).size.height * (isLandscape ? 0.4 : 0.38),
+                        height: MediaQuery.of(context).size.height * (isLandscape ? 0.4 : 0.33),
                         decoration: BoxDecoration(
                           color: Colors.black,
                           borderRadius: BorderRadius.circular(24),
@@ -1696,26 +1801,36 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                                      fontWeight: FontWeight.bold)),
                              const SizedBox(height: 16),
                              Container(
-                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                               margin: const EdgeInsets.symmetric(horizontal: 16),
+                               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                                decoration: BoxDecoration(
-                                 color: Colors.black26,
-                                 borderRadius: BorderRadius.circular(12),
-                                 border: Border.all(color: kPrimaryColor.withOpacity(0.2)),
+                                 color: Colors.cyanAccent.withOpacity(0.12),
+                                 borderRadius: BorderRadius.circular(20),
+                                 border: Border.all(color: Colors.cyanAccent.withOpacity(0.4), width: 1.5),
+                                 boxShadow: [
+                                   BoxShadow(
+                                     color: Colors.cyanAccent.withOpacity(0.1),
+                                     blurRadius: 20,
+                                   )
+                                 ],
                                ),
                                child: Column(
+                                 mainAxisSize: MainAxisSize.min,
                                  children: [
-                                   const Text("Open this website on your computer",
-                                       style: TextStyle(color: Colors.white54, fontSize: 11)),
-                                   const SizedBox(height: 6),
+                                   const Text("Open this website on another device to receive",
+                                       style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                                   const SizedBox(height: 12),
                                    const FittedBox(
                                      fit: BoxFit.scaleDown,
                                      child: Text(
                                        "https://castnow.vercel.app",
                                        style: TextStyle(
-                                           color: kPrimaryColor,
-                                           fontSize: 16,
+                                           color: Colors.cyanAccent,
+                                           fontSize: 22,
                                            fontWeight: FontWeight.w900,
-                                           letterSpacing: 0.5),
+                                           decoration: TextDecoration.underline,
+                                           decorationColor: Colors.cyanAccent,
+                                           letterSpacing: 1.0),
                                      ),
                                    ),
                                  ],
