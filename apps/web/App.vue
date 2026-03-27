@@ -346,20 +346,19 @@ const handleJoin = () => {
   peerInstance.value = peer;
 
     peer.on("open", () => {
-      const conn = peer.connect(joinCode.value, { serialization: 'none' });
+      const conn = peer.connect(joinCode.value, { serialization: 'json' });
 
       conn.on("open", () => {
         console.log("DataConnection OPEN: Connected to App", conn.peer);
         const info = getDeviceInfo();
-        const infoStr = JSON.stringify(info); // Manually stringify
-        console.log("SENDING DEVICE INFO (RAW):", infoStr);
+        console.log("SENDING DEVICE INFO (JSON):", info);
         
         // Use a small delay for the first message to ensure PeerDart listener is fully ready
         setTimeout(() => {
-          conn.send(infoStr);
+          conn.send(info);
         }, 500);
         
-        setTimeout(() => conn.send(infoStr), 3000); 
+        setTimeout(() => conn.send(info), 3000); 
         appState.value = STATES.RECEIVER_ACTIVE;
         isConnecting.value = false;
       });
