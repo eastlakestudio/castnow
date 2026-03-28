@@ -388,7 +388,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   String? _peerId;
   bool _isScreenSharing = false;
-  bool _isMuted = true;
+  // bool _isMuted = false;
   bool _isLoading = false;
   bool _isStopping = false;
   String? _remoteDeviceInfo;
@@ -404,6 +404,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     WakelockPlus.enable();
   }
 
+/*
   void _toggleMute() {
     if (_localStream == null) return;
     setState(() {
@@ -413,6 +414,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       }
     });
   }
+*/
 
   Future<void> _startBroadcast(bool isScreen) async {
     setState(() => _isLoading = true);
@@ -420,7 +422,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       final code = (100000 + math.Random().nextInt(900000)).toString();
       
       Map<String, dynamic> constraints = {
-        'audio': true,
+        'audio': false,
         'video': isScreen ? true : {
           'facingMode': 'user',
           'width': 1280,
@@ -450,7 +452,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       } else {
         if (!kIsWeb) {
           await Permission.camera.request();
-          await Permission.microphone.request();
+          // await Permission.microphone.request();
         }
         _localStream = await navigator.mediaDevices.getUserMedia(constraints);
       }
@@ -459,9 +461,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       _isScreenSharing = isScreen;
 
       if (_localStream != null) {
+        /*
         for (var track in _localStream!.getAudioTracks()) {
           track.enabled = !_isMuted;
         }
+        */
         for (var track in _localStream!.getTracks()) {
           track.onEnded = () => _stopBroadcast();
         }
@@ -782,9 +786,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _buildControl(icon: _isMuted ? Icons.mic_off : Icons.mic, label: _isMuted ? "Unmute" : "Mute", color: _isMuted ? Colors.red : Colors.white, onTap: _toggleMute),
-                            const SizedBox(width: 40),
-                            _buildControl(icon: Icons.stop_circle, label: "Stop", color: Colors.red, onTap: _stopBroadcast),
+                            // _buildControl(icon: _isMuted ? Icons.mic_off : Icons.mic, label: _isMuted ? "Unmute" : "Mute", color: _isMuted ? Colors.red : Colors.white, onTap: _toggleMute),
+                            // const SizedBox(width: 40),
+                            _buildControl(icon: Icons.stop_circle, label: "Stop Recording", color: Colors.red, onTap: _stopBroadcast),
                           ],
                         ),
                       ),
@@ -857,8 +861,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
        _exchangeDeviceInfo(conn);
     });
     _peer!.on("call").listen((call) async {
-       MediaStream ds = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
-       call.answer(ds);
+        MediaStream ds = await navigator.mediaDevices.getUserMedia({'audio': false, 'video': false});
+        call.answer(ds);
        call.on("stream").listen((s) {
          setState(() { _remoteRenderer.srcObject = s; _isConnected = true; _isConnecting = false; });
        });

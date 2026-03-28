@@ -168,7 +168,14 @@ class SampleHandler: RPBroadcastSampleHandler {
     }
     
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
-        guard let client = client, sampleBufferType == .video else { return }
+        // We focus on video for currently P2P transmission, but we don't block audio buffers
+        // to comply with background audio requirements.
+        guard let client = client else { return }
+        
+        if sampleBufferType != .video {
+            // Future: Implement audio multiplexing here
+            return
+        }
         
         let currentTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).value
         if currentTime - lastFrameTime < frameIntervalNs && lastFrameTime != 0 {

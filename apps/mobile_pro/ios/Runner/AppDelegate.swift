@@ -8,7 +8,20 @@ import ReplayKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // Initialize Audio Session for background audio support
+    initAudioSession()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  private func initAudioSession() {
+    do {
+      let session = AVAudioSession.sharedInstance()
+      try session.setCategory(.playAndRecord, mode: .videoChat, options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers])
+      try session.setActive(true)
+      print("✅ [CASTNOW] AVAudioSession initialized successfully.")
+    } catch {
+      print("❌ [CASTNOW] Failed to set AVAudioSession category: \(error)")
+    }
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
@@ -130,8 +143,8 @@ class BroadcastPickerView: NSObject, FlutterPlatformView {
 
     init(frame: CGRect) {
         let pickerView = RPSystemBroadcastPickerView(frame: frame)
-        pickerView.preferredExtension = "com.eastlakestudio.castnow.app.BroadcastExtension"
-        pickerView.showsMicrophoneButton = false
+        pickerView.preferredExtension = "com.eastlakestudio.castnow.pro.BroadcastExtension"
+        pickerView.showsMicrophoneButton = true
         pickerView.backgroundColor = .clear
         
         BroadcastPickerManager.shared.currentPicker = pickerView
