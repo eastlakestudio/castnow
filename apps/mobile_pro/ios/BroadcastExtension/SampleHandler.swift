@@ -92,7 +92,7 @@ class SampleHandler: RPBroadcastSampleHandler {
     ])
     
     private var lastFrameTime: Int64 = 0
-    private let frameIntervalNs: Int64 = 1_000_000_000 / 15 
+    private let frameIntervalNs: Int64 = 1_000_000_000 / 22 
     private var connectionTimer: Timer?
 
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
@@ -194,7 +194,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         }
         
         let ciImage = CIImage(cvImageBuffer: imageBuffer)
-        guard let jpegData = imageContext.jpegRepresentation(of: ciImage, colorSpace: CGColorSpaceCreateDeviceRGB(), options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.7]) else {
+        guard let jpegData = imageContext.jpegRepresentation(of: ciImage, colorSpace: CGColorSpaceCreateDeviceRGB(), options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.6]) else {
             return
         }
         

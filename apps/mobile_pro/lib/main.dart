@@ -382,13 +382,13 @@ class BroadcastScreen extends StatefulWidget {
   State<BroadcastScreen> createState() => _BroadcastScreenState();
 }
 
-class _BroadcastScreenState extends State<BroadcastScreen> {
+class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingObserver {
   Peer? _peer;
   MediaStream? _localStream;
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   String? _peerId;
   bool _isScreenSharing = false;
-  // bool _isMuted = false;
+  bool _isMuted = true;
   bool _isLoading = false;
   bool _isStopping = false;
   String? _remoteDeviceInfo;
@@ -400,11 +400,23 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _localRenderer.initialize();
     WakelockPlus.enable();
   }
 
-/*
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    debugPrint("📱 AppLifecycleState changed: $state");
+    // 锁屏或切后台时，确保音频会话依然保持但不销毁 WebRTC
+    if (state == AppLifecycleState.paused) {
+      debugPrint("🌙 App paused (Locked/Background)");
+    } else if (state == AppLifecycleState.resumed) {
+      debugPrint("☀️ App resumed");
+    }
+  }
+
   void _toggleMute() {
     if (_localStream == null) return;
     setState(() {
@@ -414,7 +426,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       }
     });
   }
-*/
 
   Future<void> _startBroadcast(bool isScreen) async {
     setState(() => _isLoading = true);
@@ -446,31 +457,83 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             'video': {'deviceId': 'broadcast'},
             'audio': false
           });
+          // 同时开启主 App 麦克风音频以获取后台音频权限
+          try {
+            if (!kIsWeb) await Permission.microphone.request();
+            MediaStream audioStream = await navigator.mediaDevices.getUserMedia({
+              'audio': true,
+              'video': false
+            });
+            if (audioStream.getAudioTracks().isNotEmpty) {
+              _localStream!.addTrack(audioStream.getAudioTracks()[0]);
+            }
+          } catch (e) {
+            debugPrint("❌ Failed to start microphone: $e");
+          }
         } else {
           _localStream = await navigator.mediaDevices.getDisplayMedia({'audio': false});
         }
       } else {
+        debugPrint("📸 [CASTNOW] Starting Camera Mode...");
         if (!kIsWeb) {
           await Permission.camera.request();
-          // await Permission.microphone.request();
+          await Permission.microphone.request();
         }
-        _localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        // --- 核心修复：iOS Camera 最稳采集方案 ---
+        // 直接在 getUserMedia 中同时请求音轨（附带降噪约束强制激活系统麦克风机制）和视轨
+        try {
+          _localStream = await navigator.mediaDevices.getUserMedia({
+            'audio': {
+               'echoCancellation': true,
+               'noiseSuppression': true,
+               'autoGainControl': true,
+            },
+            'video': constraints['video']
+          });
+          debugPrint("✅ [CASTNOW] Camera + Mic acquired successfully. Tracks: ${_localStream?.getTracks().length}");
+        } catch (e) {
+          debugPrint("❌ [CASTNOW] Failed to get Camera/Mic: $e");
+          setState(() { _isLoading = false; });
+          return;
+        }
       }
 
       _localRenderer.srcObject = _localStream;
       _isScreenSharing = isScreen;
 
       if (_localStream != null) {
-        /*
         for (var track in _localStream!.getAudioTracks()) {
           track.enabled = !_isMuted;
         }
-        */
         for (var track in _localStream!.getTracks()) {
           track.onEnded = () => _stopBroadcast();
         }
       }
 
+      // --- 关键优化：推迟网络连接，等待权限确认和网络就绪 ---
+      debugPrint("⏳ Waiting for network readiness...");
+      await Future.delayed(const Duration(milliseconds: 1000));
+      _connectWithRetry(code, isScreen, 0);
+
+    } catch (e) {
+      debugPrint("❌ Broadcast Start Error: $e");
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // --- 新增：带自动重试的 Peer 初始化逻辑 ---
+  void _connectWithRetry(String code, bool isScreen, int attempt) async {
+    if (attempt > 5) { // 最多重试 5 次
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Network Connection Failed. Please check your data settings.")));
+      return;
+    }
+
+    if (attempt > 0) debugPrint("🔄 Retrying Peer connection (Attempt $attempt)...");
+
+    try {
+      _peer?.dispose();
       _peer = Peer(id: code, options: PeerOptions(debug: LogLevel.All, config: {
         'iceServers': [
           {'urls': 'stun:stun.l.google.com:19302'},
@@ -479,7 +542,24 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           {'urls': 'stun:stun.cdn.aliyun.com:3478'},
         ]
       }));
-      _peer!.on("open").listen((id) => setState(() { _peerId = id; _isLoading = false; }));
+
+      _peer!.on("open").listen((id) {
+        debugPrint("✅ Peer connected successfully: $id");
+        if (mounted) setState(() { _peerId = id; _isLoading = false; });
+      });
+
+      _peer!.on("error").listen((error) {
+        debugPrint("⚠️ Peer/Socket Error: $error");
+        // 如果是 DNS 或网络错误，触发自动重试
+        if (error.toString().contains("Failed host lookup") || error.toString().contains("SocketException")) {
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted && _peerId == null) _connectWithRetry(code, isScreen, attempt + 1);
+          });
+        } else {
+          if (mounted) setState(() => _isLoading = false);
+        }
+      });
+      
       _peer!.on("connection").listen((conn) {
         _exchangeDeviceInfo(conn);
         if (_isScreenSharing && Platform.isAndroid) const MethodChannel('castnow_picker').invokeMethod('minimizeApp');
@@ -490,7 +570,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             debugPrint("🔥 [ICE Connection State]: ${state.toString()}");
           };
         }
-        setState(() => _isConnected = true);
+        if (mounted) setState(() => _isConnected = true);
       });
 
       if (!widget.isPro) {
@@ -641,8 +721,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _limitTimer?.cancel();
+    _localStream?.dispose();
     _localRenderer.dispose();
+    _peer?.dispose();
     WakelockPlus.disable();
     super.dispose();
   }
@@ -786,8 +869,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // _buildControl(icon: _isMuted ? Icons.mic_off : Icons.mic, label: _isMuted ? "Unmute" : "Mute", color: _isMuted ? Colors.red : Colors.white, onTap: _toggleMute),
-                            // const SizedBox(width: 40),
+                            _buildControl(icon: _isMuted ? Icons.mic_off : Icons.mic, label: _isMuted ? "Unmute" : "Mute", color: _isMuted ? Colors.red : Colors.white, onTap: _toggleMute),
+                            const SizedBox(width: 40),
                             _buildControl(icon: Icons.stop_circle, label: "Stop Recording", color: Colors.red, onTap: _stopBroadcast),
                           ],
                         ),

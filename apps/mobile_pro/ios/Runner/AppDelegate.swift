@@ -3,13 +3,34 @@ import UIKit
 import ReplayKit
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // Initialize Audio Session for background audio support
     initAudioSession()
+    
+    // 在主引擎初始化时注册自定义逻辑
+    if let registrar = self.registrar(forPlugin: "CastNowPickerPlugin") {
+        let factory = BroadcastPickerFactory()
+        registrar.register(factory, withId: "castnow_picker_view")
+        
+        let triggerChannel = FlutterMethodChannel(name: "castnow_picker_control", binaryMessenger: registrar.messenger())
+        BroadcastPickerManager.shared.channel = triggerChannel
+        triggerChannel.setMethodCallHandler { (call, result) in
+            if call.method == "triggerPicker" {
+                BroadcastPickerManager.shared.trigger()
+                result(true)
+            } else if call.method == "hidePicker" {
+                BroadcastPickerManager.shared.hidePicker()
+                result(true)
+            } else {
+                result(FlutterMethodNotImplemented)
+            }
+        }
+    }
+    
+    GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -24,42 +45,32 @@ import ReplayKit
     }
   }
 
-  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    
-    // 1. Register PlatformView & MethodChannel
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "CastNowPickerPlugin") {
-      let factory = BroadcastPickerFactory()
-      registrar.register(factory, withId: "castnow_picker_view")
-      
-      // 2. Register MethodChannel to trigger the picker manually
-      let triggerChannel = FlutterMethodChannel(name: "castnow_picker_control", binaryMessenger: registrar.messenger())
-      BroadcastPickerManager.shared.channel = triggerChannel
-      
-      triggerChannel.setMethodCallHandler { (call, result) in
-          if call.method == "triggerPicker" {
-              BroadcastPickerManager.shared.trigger()
-              result(true)
-          } else if call.method == "hidePicker" {
-              BroadcastPickerManager.shared.hidePicker()
-              result(true)
-          } else {
-              result(FlutterMethodNotImplemented)
-          }
-      }
-      print("✅ [CASTNOW] PlatformView and ControlChannel registered in didInitializeImplicitFlutterEngine.")
-      BroadcastPickerManager.shared.log("✅ Native logic initialized")
-    } else {
-      print("❌ [CASTNOW] Failed to get registrar for CastNowPickerPlugin")
-    }
-  }
-
   override func application(
     _ application: UIApplication,
     configurationForConnecting connectingSceneSession: UISceneSession,
     options: UIScene.ConnectionOptions
   ) -> UISceneConfiguration {
     return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
+  }
+
+  // --- Background Task Management for persistence during lock ---
+  private var backgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
+
+  override func applicationDidEnterBackground(_ application: UIApplication) {
+    backgroundTaskIdentifier = application.beginBackgroundTask(withName: "CastNowPersistence") { [weak self] in
+        guard let self = self else { return }
+        application.endBackgroundTask(self.backgroundTaskIdentifier)
+        self.backgroundTaskIdentifier = .invalid
+    }
+    print("🌙 [CASTNOW] App entered background, started task: \(backgroundTaskIdentifier)")
+  }
+
+  override func applicationWillEnterForeground(_ application: UIApplication) {
+    if backgroundTaskIdentifier != .invalid {
+        print("☀️ [CASTNOW] App returning to foreground, ending task: \(backgroundTaskIdentifier)")
+        application.endBackgroundTask(backgroundTaskIdentifier)
+        backgroundTaskIdentifier = .invalid
+    }
   }
 }
 
