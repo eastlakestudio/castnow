@@ -100,10 +100,15 @@ class SampleHandler: RPBroadcastSampleHandler {
         
         let bundle = Bundle.main
         let appGroupIdentifier = bundle.object(forInfoDictionaryKey: "RTCAppGroupIdentifier") as? String ?? self.appGroupIdentifier
+        let bundleID = bundle.bundleIdentifier ?? "Unknown"
+        
+        print("🔍 Debug: Bundle ID: \(bundleID)")
+        print("🔍 Debug: App Group ID: \(appGroupIdentifier)")
         
         guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) else {
             print("❌ Error: Could not verify App Group container for identifier: \(appGroupIdentifier)")
-            finishBroadcastWithError(NSError(domain: "SampleHandler", code: 1, userInfo: [NSLocalizedDescriptionKey : "App Group Error: Client is not entitled for \(appGroupIdentifier). Check project settings."]))
+            let errorMsg = "App Group Error: Client [\(bundleID)] is not entitled for \(appGroupIdentifier). Check project settings."
+            finishBroadcastWithError(NSError(domain: "SampleHandler", code: 1, userInfo: [NSLocalizedDescriptionKey : errorMsg]))
             return
         }
         
