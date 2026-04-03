@@ -388,7 +388,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   String? _peerId;
   bool _isScreenSharing = false;
-  bool _isMuted = false;
   bool _isLoading = false;
   bool _isStopping = false;
   String? _remoteDeviceInfo;
@@ -396,8 +395,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
 
   // Source Selection
   bool _shareScreen = true;
-  bool _shareCamera = false;
+  bool _shareCamera = true;
   bool _shareMic = true;
+  bool _isMuted = true;
 
   Timer? _limitTimer;
   int _remainingSeconds = 180;
@@ -427,7 +427,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
 
   Future<void> _startBroadcast() async {
     if (!_shareScreen && !_shareCamera) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select at least one video source (Screen or Camera).")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select at least one video (Screen or Camera).")));
       return;
     }
 
@@ -498,13 +498,13 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
           'video': false
         });
         if (micStream.getAudioTracks().isNotEmpty) {
-          var track = micStream.getAudioTracks()[0];
+          var audioTrack = micStream.getAudioTracks()[0];
+          audioTrack.enabled = !_isMuted; // Start muted as requested
           if (_localStream == null) {
             _localStream = micStream;
           } else {
-            _localStream!.addTrack(track);
+            _localStream!.addTrack(audioTrack);
           }
-          track.enabled = !_isMuted;
         }
       }
 

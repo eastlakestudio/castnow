@@ -25,6 +25,9 @@ import {
   Zap,
   Shield,
   Apple,
+  Mic,
+  MicOff,
+  LogOut,
 } from "lucide-vue-next";
 
 const { t, locale } = useI18n();
@@ -78,10 +81,18 @@ const pipWidth = ref(320); // Default PiP width
 const splitRatio = ref(0.5); // Default 50/50 split
 const dragType = ref(null); // 'move-pip', 'resize-pip', 'splitter'
 const isDragging = ref(false);
+let pendingDragUpdate = false;
 const dragOffset = ref({ x: 0, y: 0 });
+const isReceiverMicActive = ref(false); // Receiver side intercom toggle
+const receiverMicStream = ref(null);
+const receiverAudioStream = ref(null); // Sender side: audio stream from receiver
+const receiverAudioElement = ref(null);
+
+const videoDevices = ref([]);
+const hasMultipleCameras = computed(() => videoDevices.value.length > 1);
 
 // Sender Multi-Source State
-const selectedSources = ref(["screen", "mic"]); // ['screen', 'camera', 'mic']
+const selectedSources = ref(["screen", "camera", "mic"]); // ['screen', 'camera', 'mic'] enabled by default
 const showInfo = ref(null); // 'source', 'privacy', 'terms'
 const showProModal = ref(false);
 const showFirefoxGuide = ref(false);
@@ -90,9 +101,15 @@ const activeCode = ref("");
 const proExpiresAt = ref(null);
 const remainingSeconds = ref(180); // 3 minutes limit applied (previously 30)
 const toast = ref({ show: false, message: "", type: "info" });
+const receiverRoot = ref(null);
 let controlsTimeout = null;
 let sessionInterval = null;
 let toastTimeout = null;
+
+// 监听收到的音频流（发送端听接收端的对讲）
+watch([receiverAudioElement, receiverAudioStream], ([el, stream]) => {
+  if (el && stream) el.srcObject = stream;
+});
 
 // 监听视频元素的挂载，确保 stream 能正确绑定
 watch([localVideo, localStream], ([el, stream]) => {
@@ -120,7 +137,8 @@ watch([cameraVideo, cameraStream], ([el, stream]) => setupRemoteVideo(el, stream
 // Fallback for generic remoteStream (if metadata fails or single stream)
 const remoteVideo = ref(null);
 watch([remoteVideo, remoteStream], ([el, stream]) => {
-  if (el && stream && !screenStream.value && !cameraStream.value) {
+  // Bind if we are in the single-stream fallback (either screen or camera sub-stream is missing)
+  if (el && stream && (!screenStream.value || !cameraStream.value)) {
     setupRemoteVideo(el, stream);
   }
 });
@@ -252,8 +270,9 @@ const handleStartCasting = async () => {
         video: { cursor: "always" },
         audio: true,
       });
-      ss.getVideoTracks().forEach(t => combinedStream.addTrack(t));
-      localScreenStream.value = new MediaStream(ss.getVideoTracks());
+      // Add ALL tracks (video and audio) to combinedStream to ensure transmission and proper termination
+      ss.getTracks().forEach(t => combinedStream.addTrack(t));
+      localScreenStream.value = new MediaStream(ss.getTracks());
       // Stop broadcast if screen share is stopped via browser UI
       ss.getVideoTracks()[0].onended = () => resetApp();
     }
@@ -297,7 +316,13 @@ const handleStartCasting = async () => {
     });
     peer.on("connection", (conn) => {
       activeConnections.value.push(conn);
-      peer.call(conn.peer, localStream.value);
+      conn.on("open", () => {
+        const call = peer.call(conn.peer, localStream.value);
+        setupCallHandlers(call);
+      });
+      conn.on("close", () => {
+        activeConnections.value = activeConnections.value.filter(c => c.peer !== conn.peer);
+      });
     });
 
     peer.on("error", handlePeerError);
@@ -312,26 +337,86 @@ const handleStartCasting = async () => {
   }
 };
 
+const setupCallHandlers = (call) => {
+  call.on("stream", (remoteStream) => {
+    // This is audio coming back from the receiver (Intercom)
+    if (remoteStream.getAudioTracks().length > 0) {
+      receiverAudioStream.value = remoteStream;
+    }
+  });
+
+  call.on("error", (err) => {
+    console.error("Call Error:", err);
+  });
+  
+  call.on("close", () => {
+    activeConnections.value = activeConnections.value.filter(c => c.peer !== call.peer);
+  });
+};
+
+const toggleReceiverMic = async () => {
+  if (isDragging.value) return;
+
+  if (isReceiverMicActive.value) {
+    if (receiverMicStream.value) {
+      receiverMicStream.value.getTracks().forEach(t => t.stop());
+      receiverMicStream.value = null;
+    }
+    isReceiverMicActive.value = false;
+    showToast(t('receiver.mic_off'), "info");
+  } else {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      receiverMicStream.value = stream;
+      isReceiverMicActive.value = true;
+      showToast(t('receiver.mic_on'), "success");
+      
+      // If already in a call, we need to renegotiate. 
+      // Simplified for now: user should enable mic before/re-joining or we establish a new call
+      // In a real app we'd use replaceTrack here.
+    } catch (err) {
+      showToast(t('errors.mic_access_failed'), "error");
+    }
+  }
+};
+
 const toggleCamera = async () => {
-  if (!selectedSources.value.includes('camera') || !localStream.value) return;
+  if (!selectedSources.value.includes('camera') || !localStream.value || !localCameraStream.value) return;
+  
+  const oldMode = facingMode.value;
   facingMode.value = facingMode.value === "user" ? "environment" : "user";
 
   try {
     const newStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: facingMode.value },
-      audio: selectedSources.value.includes('mic') || !selectedSources.value.includes('screen'),
+      video: { facingMode: facingMode.value, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false 
     });
 
-    const oldTracks = localStream.value.getTracks();
-    // Only stop the camera track if possible, or just replace all if simpler
-    oldTracks.forEach((t) => t.stop());
+    const newVideoTrack = newStream.getVideoTracks()[0];
+    const oldCameraTrackId = localCameraStream.value.getVideoTracks()[0]?.id;
+    
+    // 1. Update Preview
+    localCameraStream.value = new MediaStream([newVideoTrack]);
 
-    localStream.value = newStream;
+    // 2. Identify the old camera track in localStream (the combined stream)
+    // We use the ID from our preview stream to be 100% certain
+    const oldCameraTrack = localStream.value.getVideoTracks().find(t => t.id === oldCameraTrackId);
 
+    if (oldCameraTrack) {
+      oldCameraTrack.stop();
+      localStream.value.removeTrack(oldCameraTrack);
+    }
+    localStream.value.addTrack(newVideoTrack);
+
+    // 3. Inform existing connections. PeerJS requires re-calling to replace stream mid-session
     activeConnections.value.forEach((conn) => {
-      peerInstance.value.call(conn.peer, newStream);
+      const call = peerInstance.value.call(conn.peer, localStream.value);
+      setupCallHandlers(call);
     });
+
+    showToast(t('sender.camera_switched'), "success");
   } catch (err) {
+    facingMode.value = oldMode;
     showToast(t('errors.camera_switch_failed'), "error");
   }
 };
@@ -360,8 +445,16 @@ const handleKeyDown = (e) => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener("keydown", handleKeyDown);
+  
+  // Detect cameras
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    videoDevices.value = devices.filter(d => d.kind === 'videoinput');
+  } catch (e) {
+    console.error("Device detection failed", e);
+  }
 });
 
 onUnmounted(() => {
@@ -411,7 +504,9 @@ const handleJoin = () => {
 
   // 2. Wait for Broadcaster to call us with the stream
   peer.on("call", (call) => {
-    call.answer(); // Answer without sending a stream back
+    // Answer with the local mic stream if active (Intercom)
+    call.answer(receiverMicStream.value || undefined); 
+    
     call.on("stream", (rs) => {
       remoteStream.value = rs;
 
@@ -473,22 +568,27 @@ const handleDragStart = (e, type = 'move-pip') => {
 
 const handleDragMove = (e) => {
   if (!isDragging.value) return;
-  
+  if (pendingDragUpdate) return;
+
   const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
   const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-  
-  if (dragType.value === 'move-pip') {
-    pipPosition.value = { 
-      x: clientX - dragOffset.value.x,
-      y: clientY - dragOffset.value.y
-    };
-  } else if (dragType.value === 'resize-pip') {
-    const deltaX = clientX - dragOffset.value.x;
-    pipWidth.value = Math.max(160, dragOffset.value.width + deltaX);
-  } else if (dragType.value === 'splitter') {
-    const totalWidth = window.innerWidth;
-    splitRatio.value = Math.min(0.9, Math.max(0.1, clientX / totalWidth));
-  }
+
+  pendingDragUpdate = true;
+  requestAnimationFrame(() => {
+    if (dragType.value === 'move-pip') {
+      pipPosition.value = {
+        x: clientX - dragOffset.value.x,
+        y: clientY - dragOffset.value.y
+      };
+    } else if (dragType.value === 'resize-pip') {
+      const deltaX = clientX - dragOffset.value.x;
+      pipWidth.value = Math.max(160, dragOffset.value.width + deltaX);
+    } else if (dragType.value === 'splitter') {
+      const totalWidth = window.innerWidth;
+      splitRatio.value = Math.min(0.9, Math.max(0.1, clientX / totalWidth));
+    }
+    pendingDragUpdate = false;
+  });
 };
 
 const handleDragEnd = () => {
@@ -510,31 +610,47 @@ const toggleMic = () => {
 };
 
 const toggleFullscreen = () => {
-  if (!document.fullscreenElement && remoteVideo.value) {
-    remoteVideo.value.parentElement
+  if (!document.fullscreenElement && receiverRoot.value) {
+    receiverRoot.value
       .requestFullscreen()
       .catch((err) => console.log(err));
-  } else {
+  } else if (document.fullscreenElement) {
     document.exitFullscreen();
   }
 };
 
 const handleMouseMove = (e) => {
-  // Show controls if mouse is in the bottom 20% of the screen
-  const threshold = window.innerHeight * 0.8;
-  const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-  
-  if (clientY > threshold) {
-    showControls.value = true;
-  } else if (!isDragging.value) {
-    showControls.value = false;
-  }
+  // Logic removed in favor of mouseenter/mouseleave on sensing zone
 };
 
 // --- Shared ---
 const resetApp = (forceLanding = false) => {
-  if (localStream.value) localStream.value.getTracks().forEach((t) => t.stop());
-  if (peerInstance.value) peerInstance.value.destroy();
+  // Stop ALL active streams to prevent "camera residue" or mic usage lights staying on
+  const streamsToStop = [
+    localStream.value,
+    localScreenStream.value,
+    localCameraStream.value,
+    remoteStream.value,
+    screenStream.value,
+    cameraStream.value,
+    receiverMicStream.value,
+    receiverAudioStream.value
+  ];
+
+  streamsToStop.forEach(s => {
+    if (s && s.getTracks) {
+      s.getTracks().forEach(t => {
+        t.stop();
+        console.log(`Stopped track: ${t.label}`);
+      });
+    }
+  });
+
+  if (peerInstance.value) {
+    peerInstance.value.destroy();
+    peerInstance.value = null;
+  }
+
   if (sessionInterval) {
     clearInterval(sessionInterval);
     sessionInterval = null;
@@ -571,14 +687,23 @@ const resetApp = (forceLanding = false) => {
           class="bg-gradient-to-r from-slate-100 to-slate-400 bg-clip-text text-xl font-black italic uppercase tracking-tight text-transparent pr-1">CastNow</span>
 
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-4">
+        <!-- Language Switcher -->
         <button @click="toggleLanguage"
-          class="flex items-center gap-2 px-3 py-1 bg-slate-800 border border-slate-700 rounded-full hover:bg-slate-700 transition-all group">
-          <Globe class="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-500 transition-colors" />
-          <span class="text-[10px] font-black uppercase tracking-tighter text-slate-300 group-hover:text-white">{{ locale
-            === 'zh' ? 'EN' : '中文' }}</span>
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-full hover:border-amber-500/50 transition-all text-[10px] font-black uppercase tracking-widest text-slate-400 group">
+          <Globe class="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-500 transition-colors" />
+          <span :class="{ 'text-white': locale === 'zh' }">中文</span>
+          <span class="text-slate-700">/</span>
+          <span :class="{ 'text-white': locale === 'en' }">EN</span>
         </button>
 
+        <div class="w-px h-4 bg-slate-800 hidden md:block"></div>
+
+        <button @click="showInfo = 'source'"
+          class="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl hover:border-slate-600 transition-all group">
+          <Globe class="w-4 h-4 text-slate-500 group-hover:text-amber-500 transition-colors" />
+          <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-white transition-colors">{{ $t('landing.source') }}</span>
+        </button>
       </div>
     </header>
 
@@ -796,7 +921,7 @@ const resetApp = (forceLanding = false) => {
                   <span class="text-[10px] font-black uppercase">{{ isMicMuted ? $t('sender.muted') : $t('sender.mic_on')
                     }}</span>
                 </button>
-                <button v-if="selectedSources.includes('camera')" @click="toggleCamera"
+                <button v-if="selectedSources.includes('camera') && hasMultipleCameras" @click="toggleCamera"
                   class="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-full hover:bg-amber-500 hover:text-slate-950 transition-all">
                   <Repeat class="w-3 h-3" />
                   <span class="text-[10px] font-black uppercase">{{
@@ -946,6 +1071,7 @@ const resetApp = (forceLanding = false) => {
 
         <!-- Receiver Active -->
         <div v-else-if="appState === STATES.RECEIVER_ACTIVE" 
+          ref="receiverRoot"
           class="fixed inset-0 bg-black flex items-center justify-center overflow-hidden" 
           @mousemove="handleDragMove"
           @mouseup="handleDragEnd"
@@ -953,17 +1079,19 @@ const resetApp = (forceLanding = false) => {
           @touchmove="handleDragMove"
           @touchend="handleDragEnd">
           
-          <div :class="['relative w-full h-full flex transition-all duration-500 ease-in-out', 
-                        layoutMode === 'side-by-side' ? 'p-2 gap-0' : '']">
+          <div :class="['relative w-full h-full flex ease-in-out', 
+                        layoutMode === 'side-by-side' ? 'p-2 gap-0' : '',
+                        isDragging ? 'no-transition' : 'transition-all duration-500']">
             
             <!-- Stream A (Primary) -->
-            <div :class="['relative overflow-hidden bg-slate-900 transition-all duration-500', 
-                          layoutMode === 'pip' ? 'w-full h-full' : 'rounded-2xl']"
+            <div :class="['relative overflow-hidden bg-slate-900 flex items-center justify-center', 
+                          layoutMode === 'pip' ? 'w-full h-full' : 'rounded-2xl',
+                          isDragging ? 'no-transition' : 'transition-all duration-500']"
                  :style="layoutMode === 'side-by-side' ? { width: (splitRatio * 100) + '%' } : (layoutMode === 'pip' && isSwapped ? 'order: 2' : '')">
               <video :ref="isSwapped ? 'cameraVideo' : 'screenVideo'" 
                      autoplay playsinline 
                      :muted="isMuted"
-                     class="w-full h-full object-contain" />
+                     class="max-w-full max-h-full object-contain" />
               <div v-if="layoutMode === 'side-by-side'" class="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold text-white uppercase tracking-widest">
                 {{ isSwapped ? 'Camera' : 'Screen' }}
               </div>
@@ -976,15 +1104,15 @@ const resetApp = (forceLanding = false) => {
               <div class="h-12 w-1 bg-white/20 rounded-full group-hover:bg-amber-500 transition-colors"></div>
             </div>
 
-            <!-- Stream B (Secondary/PiP Window) -->
             <div v-if="cameraStream && screenStream"
-                 :class="['overflow-hidden shadow-2xl transition-all group', 
+                 :class="['overflow-hidden shadow-2xl group flex items-center justify-center', 
+                          isDragging ? 'no-transition' : 'transition-all duration-500',
                           layoutMode === 'pip' ? 'absolute rounded-xl border border-white/20 cursor-move z-20 hover:border-amber-500/50' : 'relative rounded-2xl bg-slate-900']"
                  :style="layoutMode === 'pip' ? { 
                     left: pipPosition.x + 'px', 
                     top: pipPosition.y + 'px',
                     width: pipWidth + 'px',
-                    aspectRatio: '16/9',
+                    height: 'auto',
                     order: isSwapped ? 1 : 2,
                     transition: isDragging ? 'none' : 'all 0.5s ease-in-out'
                  } : { width: ((1 - splitRatio) * 100) + '%' }"
@@ -993,7 +1121,7 @@ const resetApp = (forceLanding = false) => {
               <video :ref="isSwapped ? 'screenVideo' : 'cameraVideo'" 
                      autoplay playsinline 
                      :muted="isMuted"
-                     class="w-full h-full object-cover pointer-events-none" />
+                     class="max-w-full max-h-full object-contain pointer-events-none" />
               
               <div v-if="layoutMode === 'side-by-side'" class="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold text-white uppercase tracking-widest">
                 {{ isSwapped ? 'Screen' : 'Camera' }}
@@ -1019,54 +1147,71 @@ const resetApp = (forceLanding = false) => {
 
           </div>
 
-          <!-- Interaction Sensing Zone (Bottom area) -->
-          <div class="absolute bottom-0 left-0 w-full h-40 z-40"
-               @mousemove="handleMouseMove"></div>
 
-          <!-- Unified Bottom Control Bar -->
-          <Transition name="fade">
-            <div v-if="showControls"
-              class="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-6 z-50 p-3 bg-black/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 shadow-2xl">
-              
-              <!-- Left: Leave Button -->
-              <button @click="resetApp"
-                class="flex items-center gap-2 px-5 py-3 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all font-black text-xs uppercase tracking-widest active:scale-95">
-                <LogOut class="w-4 h-4" /> {{ $t('active.leave') }}
-              </button>
-
-              <div class="w-px h-8 bg-white/10"></div>
-
-              <!-- Center: Primary Controls -->
-              <div class="flex items-center gap-2">
-                <button @click="toggleLayout" title="Toggle Layout"
-                  class="p-4 bg-white/5 rounded-full text-white hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-95 group">
-                  <Monitor v-if="layoutMode === 'pip'" class="w-6 h-6" />
-                  <div v-else class="flex gap-0.5">
-                    <div class="w-2.5 h-4 bg-current rounded-sm"></div>
-                    <div class="w-2.5 h-4 bg-current rounded-sm"></div>
-                  </div>
-                </button>
-
-                <button @click="swapStreams" title="Swap Streams"
-                  class="p-4 bg-white/5 rounded-full text-white hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-95">
-                  <Repeat class="w-6 h-6" />
-                </button>
-
-                <button @click="toggleMute"
-                  class="p-4 bg-white/5 rounded-full text-white hover:bg-white/10 transition-all active:scale-95"
-                  :class="{ 'bg-red-500/20 text-red-500': isMuted }">
-                  <component :is="isMuted ? VolumeX : Volume2" class="w-6 h-6" />
-                </button>
+          <!-- Bottom Interactive Area (100% width) -->
+          <div class="absolute bottom-0 left-0 w-full h-48 z-40 group/controls"
+               @mouseenter="showControls = true"
+               @mouseleave="showControls = false">
+            
+            <!-- Unified Bottom Control Bar -->
+            <Transition name="fade">
+              <div v-if="showControls"
+                class="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-6 z-50 p-3 bg-black/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 shadow-2xl pointer-events-auto">
                 
-                <button @click="toggleFullscreen"
-                  class="p-4 bg-white/5 rounded-full text-white hover:bg-white/10 transition-all active:scale-95">
-                  <Maximize class="w-6 h-6" />
+                <!-- Left: Leave Button -->
+                <button @click="resetApp"
+                  class="flex items-center gap-2 px-5 py-3 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all font-black text-xs uppercase tracking-widest active:scale-95">
+                  <LogOut class="w-4 h-4" /> {{ $t('active.leave') }}
                 </button>
+
+                <div class="w-px h-8 bg-white/10"></div>
+
+                <!-- Center: Primary Controls -->
+                <div class="flex items-center gap-2">
+                  <button @click="toggleLayout" title="Toggle Layout"
+                    class="p-4 bg-white/5 rounded-full text-white hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-95 group">
+                    <Monitor v-if="layoutMode === 'pip'" class="w-6 h-6" />
+                    <div v-else class="flex gap-0.5">
+                      <div class="w-2.5 h-4 bg-current rounded-sm"></div>
+                      <div class="w-2.5 h-4 bg-current rounded-sm"></div>
+                    </div>
+                  </button>
+
+                  <button @click="swapStreams" title="Swap Streams"
+                    class="p-4 bg-white/5 rounded-full text-white hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-95">
+                    <Repeat class="w-6 h-6" />
+                  </button>
+
+                  <button @click="toggleMute"
+                    class="p-4 bg-white/5 rounded-full text-white hover:bg-white/10 transition-all active:scale-95"
+                    :class="{ 'bg-red-500/20 text-red-500': isMuted }">
+                    <component :is="isMuted ? VolumeX : Volume2" class="w-6 h-6" />
+                  </button>
+                  
+                  <button @click="toggleFullscreen"
+                    class="p-4 bg-white/5 rounded-full text-white hover:bg-white/10 transition-all active:scale-95">
+                    <Maximize class="w-6 h-6" />
+                  </button>
+
+                  <div class="w-px h-8 bg-white/10 mx-2"></div>
+
+                  <!-- Receiver Mic Toggle -->
+                  <button @click="toggleReceiverMic"
+                    class="p-4 rounded-full transition-all active:scale-95 flex items-center gap-2 group"
+                    :class="isReceiverMicActive ? 'bg-amber-500 text-slate-950' : 'bg-white/5 text-white hover:bg-white/10'">
+                    <Mic v-if="isReceiverMicActive" class="w-6 h-6" />
+                    <MicOff v-else class="w-6 h-6 opacity-60" />
+                    <span v-if="isReceiverMicActive" class="text-[10px] font-black uppercase pr-2">{{ $t('receiver.mic') }}</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          </Transition>
+            </Transition>
+          </div>
         </div>
       </Transition>
+      
+      <!-- Hidden Audio for Intercom (Sender side hears Receiver) -->
+      <audio ref="receiverAudioElement" autoplay class="hidden"></audio>
     </main>
 
     <!-- Info Modal -->
@@ -1204,6 +1349,14 @@ const resetApp = (forceLanding = false) => {
 }
 
 video {
+  transition: opacity 0.5s;
+}
+
+.no-transition, .no-transition * {
+  transition: none !important;
+}
+
+.grid {
   transition: filter 0.3s ease;
 }
 

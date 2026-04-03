@@ -37,13 +37,17 @@
         "terminate": "结束投屏",
         "muted": "已静音",
         "mic_on": "麦克风",
-        "active_sync": "多源同步传输中"
+        "active_sync": "多源同步传输中",
+        "camera_switched": "摄像头镜头已切换"
     },
     "receiver": {
         "title": "输入访问码",
         "keyboard_hint": "请使用实体键盘输入访问码",
         "connect_now": "立即连接",
-        "stop_connecting": "停止连接"
+        "stop_connecting": "停止连接",
+        "mic": "麦克风",
+        "mic_on": "麦克风已开启",
+        "mic_off": "麦克风已禁音"
     },
     "firefox": {
         "title": "检测到 Firefox",
@@ -60,7 +64,8 @@
         "conn_failed": "连接失败。请检查访问码。",
         "service_error": "服务错误。请稍后再试。",
         "camera_switch_failed": "摄像头切换失败",
-        "select_at_least_one": "请至少选择一个源"
+        "select_at_least_one": "请至少选择一个源",
+        "mic_access_failed": "麦克风访问请求被拒绝"
     },
     "ended": {
         "title": "投屏已结束",
@@ -95,6 +100,8 @@
         "left": "剩余",
         "expired": "已过期",
         "days_short": "天",
-        "hours_short": "小时"
+        "hours_short": "小时",
+        "zh": "中文",
+        "en": "EN"
     }
 }

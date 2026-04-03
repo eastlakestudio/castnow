@@ -37,13 +37,17 @@
         "terminate": "Terminate Stream",
         "muted": "Muted",
         "mic_on": "Mic On",
-        "active_sync": "Syncing Multi-Source"
+        "active_sync": "Syncing Multi-Source",
+        "camera_switched": "Camera Lens Switched"
     },
     "receiver": {
         "title": "Enter Access Key",
         "keyboard_hint": "Type access key via physical keyboard",
         "connect_now": "Connect Now",
-        "stop_connecting": "Stop Connecting"
+        "stop_connecting": "Stop Connecting",
+        "mic": "Microphone",
+        "mic_on": "Microphone ON",
+        "mic_off": "Microphone OFF"
     },
     "firefox": {
         "title": "Firefox Detected",
@@ -60,7 +64,8 @@
         "conn_failed": "Connection failed. Check code.",
         "service_error": "Service error. Please try again later.",
         "camera_switch_failed": "Camera switch failed",
-        "select_at_least_one": "Select at least one source"
+        "select_at_least_one": "Select at least one source",
+        "mic_access_failed": "Microphone access denied"
     },
     "ended": {
         "title": "Broadcast Ended",
@@ -95,6 +100,8 @@
         "left": "left",
         "expired": "Expired",
         "days_short": "d",
-        "hours_short": "h"
+        "hours_short": "h",
+        "zh": "中文",
+        "en": "EN"
     }
 }
