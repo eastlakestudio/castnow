@@ -54,11 +54,34 @@ const isMicMuted = ref(false);
 // Receiver Refs
 const joinCode = ref("");
 const remoteStream = ref(null);
-const remoteVideo = ref(null);
+const screenStream = ref(null);
+const cameraStream = ref(null);
+const screenVideo = ref(null);
+const cameraVideo = ref(null);
+
+// Sender Preview Refs
+const localScreenStream = ref(null);
+const localCameraStream = ref(null);
+const localScreenVideo = ref(null);
+const localCameraVideo = ref(null);
+
 const isMuted = ref(false);
 const showControls = ref(true);
 const showEndedDialog = ref(false);
 const remoteDeviceInfo = ref(""); // Metadata from Broadcaster
+
+// Layout State
+const layoutMode = ref("pip"); // 'pip' | 'side-by-side'
+const isSwapped = ref(false); // Swap which stream is primary
+const pipPosition = ref({ x: 20, y: 20 });
+const pipWidth = ref(320); // Default PiP width
+const splitRatio = ref(0.5); // Default 50/50 split
+const dragType = ref(null); // 'move-pip', 'resize-pip', 'splitter'
+const isDragging = ref(false);
+const dragOffset = ref({ x: 0, y: 0 });
+
+// Sender Multi-Source State
+const selectedSources = ref(["screen", "mic"]); // ['screen', 'camera', 'mic']
 const showInfo = ref(null); // 'source', 'privacy', 'terms'
 const showProModal = ref(false);
 const showFirefoxGuide = ref(false);
@@ -71,37 +94,34 @@ let controlsTimeout = null;
 let sessionInterval = null;
 let toastTimeout = null;
 
-// 监听 localVideo/remoteVideo 的挂载，确保 stream 能正确绑定
+// 监听视频元素的挂载，确保 stream 能正确绑定
 watch([localVideo, localStream], ([el, stream]) => {
-  if (el && stream) {
-    el.srcObject = stream;
-  }
+  if (el && stream) el.srcObject = stream;
+});
+watch([localScreenVideo, localScreenStream], ([el, stream]) => {
+  if (el && stream) el.srcObject = stream;
+});
+watch([localCameraVideo, localCameraStream], ([el, stream]) => {
+  if (el && stream) el.srcObject = stream;
 });
 
+const setupRemoteVideo = (el, stream) => {
+  if (!el || !stream) return;
+  el.srcObject = stream;
+  el.muted = isMuted.value;
+  el.setAttribute("playsinline", "true");
+  el.setAttribute("webkit-playsinline", "true");
+  el.play().catch(e => console.log("Autoplay blocked", e));
+};
+
+watch([screenVideo, screenStream], ([el, stream]) => setupRemoteVideo(el, stream));
+watch([cameraVideo, cameraStream], ([el, stream]) => setupRemoteVideo(el, stream));
+
+// Fallback for generic remoteStream (if metadata fails or single stream)
+const remoteVideo = ref(null);
 watch([remoteVideo, remoteStream], ([el, stream]) => {
-  if (el && stream) {
-    el.srcObject = stream;
-
-    // Ensure muted and playsinline are set for autoplay reliability
-    el.muted = isMuted.value;
-    el.setAttribute("playsinline", "true");
-    el.setAttribute("webkit-playsinline", "true");
-
-    const playVideo = () => {
-      el.play().catch((e) => {
-        console.log("Remote autoplay blocked, waiting for interaction", e);
-        showControls.value = true;
-      });
-    };
-
-    // Give it a tiny bit of time to settle or wait for metadata
-    if (el.readyState >= 2) {
-      playVideo();
-    } else {
-      el.onloadedmetadata = playVideo;
-    }
-
-    // Session limit removed for web version
+  if (el && stream && !screenStream.value && !cameraStream.value) {
+    setupRemoteVideo(el, stream);
   }
 });
 
@@ -197,44 +217,71 @@ const handlePeerError = (err) => {
   isConnecting.value = false;
 };
 
-const handleStartCasting = async (mode) => {
-  castingMode.value = mode;
-
-  // 检查浏览器兼容性
-  if (mode === "screen") {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      // iOS WebView 或旧版安卓 WebView 可能不支持
-      showToast(
-        t('errors.screen_share_unsupported'),
-        "error",
-        5000
-      );
-      return;
+const toggleSource = (source) => {
+  const index = selectedSources.value.indexOf(source);
+  if (index > -1) {
+    // If removing a video source, ensure the other one is still present
+    if (source === 'screen' || source === 'camera') {
+      const otherVideo = source === 'screen' ? 'camera' : 'screen';
+      if (!selectedSources.value.includes(otherVideo)) {
+        // This is the last video source, do not remove
+        return;
+      }
     }
+    selectedSources.value.splice(index, 1);
+  } else {
+    selectedSources.value.push(source);
   }
+};
 
+const handleStartCasting = async () => {
   try {
     isConnecting.value = true;
     error.value = null;
 
-    let stream = null;
-    if (mode === "screen") {
-      stream = await navigator.mediaDevices.getDisplayMedia({
+    let combinedStream = new MediaStream();
+
+    // 1. Screen Share
+    if (selectedSources.value.includes('screen')) {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        showToast(t('errors.screen_share_unsupported'), "error", 5000);
+        isConnecting.value = false;
+        return;
+      }
+      const ss = await navigator.mediaDevices.getDisplayMedia({
         video: { cursor: "always" },
         audio: true,
       });
-    } else {
-      stream = await navigator.mediaDevices.getUserMedia({
+      ss.getVideoTracks().forEach(t => combinedStream.addTrack(t));
+      localScreenStream.value = new MediaStream(ss.getVideoTracks());
+      // Stop broadcast if screen share is stopped via browser UI
+      ss.getVideoTracks()[0].onended = () => resetApp();
+    }
+
+    // 2. Camera Share
+    if (selectedSources.value.includes('camera')) {
+      const cs = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: facingMode.value,
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
-        audio: true,
+        audio: selectedSources.value.includes('mic') && !selectedSources.value.includes('screen'), 
+      });
+      cs.getVideoTracks().forEach(t => {
+        localCameraStream.value = new MediaStream([t]);
+        combinedStream.addTrack(t);
       });
     }
 
-    localStream.value = stream;
+    // 3. Audio (Only if 'mic' selected and not already added by Screen/Camera)
+    const hasAudio = combinedStream.getAudioTracks().length > 0;
+    if (selectedSources.value.includes('mic') && !hasAudio) {
+      const as = await navigator.mediaDevices.getUserMedia({ audio: true });
+      as.getTracks().forEach(t => combinedStream.addTrack(t));
+    }
+
+    localStream.value = combinedStream;
     appState.value = STATES.SENDER;
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -250,44 +297,33 @@ const handleStartCasting = async (mode) => {
     });
     peer.on("connection", (conn) => {
       activeConnections.value.push(conn);
-      // Sender initiates the call upon data connection
       peer.call(conn.peer, localStream.value);
     });
 
     peer.on("error", handlePeerError);
-
-    peer.on("disconnected", () => {
-      console.log("Peer disconnected from server");
-      // peer.reconnect(); // Optional: Auto reconnect
-    });
-
-    // 如果是屏幕共享，监听停止事件（用户点击浏览器/系统自带的停止共享按钮）
-    stream.getVideoTracks()[0].onended = () => resetApp();
   } catch (err) {
     console.error(err);
-    // 处理用户取消屏幕共享的情况
     if (err.name === "NotAllowedError") {
       error.value = null;
-      isConnecting.value = false;
-      return;
+    } else {
+      error.value = t('errors.device_denied');
     }
-    error.value = t('errors.device_denied');
     isConnecting.value = false;
-    appState.value = STATES.LANDING;
   }
 };
 
 const toggleCamera = async () => {
-  if (castingMode.value !== "camera" || !localStream.value) return;
+  if (!selectedSources.value.includes('camera') || !localStream.value) return;
   facingMode.value = facingMode.value === "user" ? "environment" : "user";
 
   try {
     const newStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: facingMode.value },
-      audio: true,
+      audio: selectedSources.value.includes('mic') || !selectedSources.value.includes('screen'),
     });
 
     const oldTracks = localStream.value.getTracks();
+    // Only stop the camera track if possible, or just replace all if simpler
     oldTracks.forEach((t) => t.stop());
 
     localStream.value = newStream;
@@ -345,48 +381,31 @@ const handleJoin = () => {
 
   peerInstance.value = peer;
 
-    peer.on("open", () => {
-      const conn = peer.connect(joinCode.value, { serialization: 'json' });
+  peer.on("open", () => {
+    const conn = peer.connect(joinCode.value, { serialization: 'json' });
 
-      conn.on("open", () => {
-        console.log("DataConnection OPEN: Connected to App", conn.peer);
-        const info = getDeviceInfo();
-        console.log("SENDING DEVICE INFO (JSON):", info);
-        
-        // Use a small delay for the first message to ensure PeerDart listener is fully ready
-        setTimeout(() => {
-          conn.send(info);
-        }, 500);
-        
-        setTimeout(() => conn.send(info), 3000); 
-        appState.value = STATES.RECEIVER_ACTIVE;
-        isConnecting.value = false;
-      });
-
-      conn.on("data", (data) => {
-        console.log("RECEIVED FROM APP:", data);
-        try {
-          const payload = typeof data === "string" ? JSON.parse(data) : data;
-          if (payload && payload.type === "dev") {
-            remoteDeviceInfo.value = `${payload.os} ${payload.model || ""}`.trim();
-          }
-        } catch (e) {
-          console.error("Data Parse Error:", e, data);
-        }
-      });
-
-    conn.on("error", (err) => {
-      console.error("Connection Error", err);
-      error.value = t('errors.conn_failed');
+    conn.on("open", () => {
+      console.log("DataConnection OPEN");
+      const info = getDeviceInfo();
+      setTimeout(() => conn.send(info), 500);
+      appState.value = STATES.RECEIVER_ACTIVE;
       isConnecting.value = false;
     });
 
-    // Auto close if broadcaster leaves
+    conn.on("data", (data) => {
+      try {
+        const payload = typeof data === "string" ? JSON.parse(data) : data;
+        if (payload && payload.type === "dev") {
+          remoteDeviceInfo.value = `${payload.os} ${payload.model || ""}`.trim();
+        }
+      } catch (e) {
+        console.error("Data Parse Error:", e);
+      }
+    });
+
     conn.on("close", () => {
       appState.value = STATES.BROADCAST_ENDED;
       resetApp();
-      // Overwrite the appState again because resetApp sets it to LANDING
-      appState.value = STATES.BROADCAST_ENDED;
     });
   });
 
@@ -395,6 +414,17 @@ const handleJoin = () => {
     call.answer(); // Answer without sending a stream back
     call.on("stream", (rs) => {
       remoteStream.value = rs;
+
+      // Simplistic track split: users can swap manually via UI
+      const videoTracks = rs.getVideoTracks();
+      const audioTracks = rs.getAudioTracks();
+
+      if (videoTracks.length > 0) {
+        screenStream.value = new MediaStream([videoTracks[0], ...audioTracks]);
+      }
+      if (videoTracks.length > 1) {
+        cameraStream.value = new MediaStream([videoTracks[1]]);
+      }
     });
   });
 
@@ -406,11 +436,68 @@ const handleJoin = () => {
   });
 };
 
-const toggleMute = () => {
-  if (remoteVideo.value) {
-    remoteVideo.value.muted = !remoteVideo.value.muted;
-    isMuted.value = remoteVideo.value.muted;
+const toggleLayout = () => {
+  layoutMode.value = layoutMode.value === "pip" ? "side-by-side" : "pip";
+};
+
+const swapStreams = () => {
+  isSwapped.value = !isSwapped.value;
+};
+
+// Drag implementation for PiP & Splitter
+const handleDragStart = (e, type = 'move-pip') => {
+  if (layoutMode.value === 'side-by-side' && type !== 'splitter') return;
+  
+  isDragging.value = true;
+  dragType.value = type;
+  
+  const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+  const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+  
+  if (type === 'move-pip') {
+    dragOffset.value = {
+      x: clientX - pipPosition.value.x,
+      y: clientY - pipPosition.value.y
+    };
+  } else if (type === 'resize-pip') {
+    dragOffset.value = {
+      x: clientX,
+      width: pipWidth.value
+    };
+  } else if (type === 'splitter') {
+    dragOffset.value = {
+      x: clientX
+    };
   }
+};
+
+const handleDragMove = (e) => {
+  if (!isDragging.value) return;
+  
+  const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+  const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+  
+  if (dragType.value === 'move-pip') {
+    pipPosition.value = { 
+      x: clientX - dragOffset.value.x,
+      y: clientY - dragOffset.value.y
+    };
+  } else if (dragType.value === 'resize-pip') {
+    const deltaX = clientX - dragOffset.value.x;
+    pipWidth.value = Math.max(160, dragOffset.value.width + deltaX);
+  } else if (dragType.value === 'splitter') {
+    const totalWidth = window.innerWidth;
+    splitRatio.value = Math.min(0.9, Math.max(0.1, clientX / totalWidth));
+  }
+};
+
+const handleDragEnd = () => {
+  isDragging.value = false;
+  dragType.value = null;
+};
+
+const toggleMute = () => {
+  isMuted.value = !isMuted.value;
 };
 
 const toggleMic = () => {
@@ -432,12 +519,16 @@ const toggleFullscreen = () => {
   }
 };
 
-const handleMouseMove = () => {
-  showControls.value = true;
-  if (controlsTimeout) clearTimeout(controlsTimeout);
-  controlsTimeout = setTimeout(() => {
+const handleMouseMove = (e) => {
+  // Show controls if mouse is in the bottom 20% of the screen
+  const threshold = window.innerHeight * 0.8;
+  const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+  
+  if (clientY > threshold) {
+    showControls.value = true;
+  } else if (!isDragging.value) {
     showControls.value = false;
-  }, 3000);
+  }
 };
 
 // --- Shared ---
@@ -449,16 +540,17 @@ const resetApp = (forceLanding = false) => {
     sessionInterval = null;
   }
 
-
-  // Ensure BROADCAST_ENDED dialog sticks if we just timed out, 
-  // otherwise default to LANDING
   if (forceLanding || appState.value !== STATES.BROADCAST_ENDED) {
     appState.value = STATES.LANDING;
   }
 
   peerId.value = "";
   localStream.value = null;
+  localScreenStream.value = null;
+  localCameraStream.value = null;
   remoteStream.value = null;
+  screenStream.value = null;
+  cameraStream.value = null;
   activeConnections.value = [];
   joinCode.value = "";
   isConnecting.value = false;
@@ -606,45 +698,80 @@ const resetApp = (forceLanding = false) => {
             {{ $t('source_select.title') }}
             <span class="w-8 h-[2px] bg-amber-500"></span>
           </h2>
-          <div class="grid grid-cols-1 gap-4 w-full max-w-sm">
-            <!-- Desktop/Screen Option: Enabled for Mobile now -->
-            <button @click="handleStartCasting('screen')"
-              class="flex items-center gap-6 p-6 bg-slate-900 border border-slate-800 rounded-[2rem] hover:border-amber-500 transition-all group text-left relative overflow-hidden">
-              <div
-                class="w-16 h-16 bg-slate-950 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Monitor class="w-8 h-8 text-amber-500" />
-              </div>
-              <div>
-                <span class="block font-black uppercase tracking-widest text-lg">{{ $t('source_select.screen_share')
-                  }}</span>
-                <p class="text-[10px] text-slate-500 uppercase font-bold mt-1">
-                  {{
-                    isMobile
-                      ? $t('source_select.experimental_android')
-                      : $t('source_select.system_mirroring')
-                  }}
-                </p>
-              </div>
-            </button>
+          <div class="w-full max-w-2xl space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+              <!-- Screen Share Card -->
+              <button @click="toggleSource('screen')"
+                class="flex flex-col items-center gap-6 p-10 bg-slate-900 border rounded-[2.5rem] transition-all group relative overflow-hidden"
+                :class="selectedSources.includes('screen') ? 'border-amber-500 bg-amber-500/5 shadow-[0_0_40px_-10px_rgba(245,158,11,0.2)]' : 'border-slate-800 border-dashed hover:border-slate-600 hover:bg-slate-800/30'">
+                <div
+                  class="w-20 h-20 bg-slate-950 rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-xl">
+                  <Monitor class="w-10 h-10" :class="selectedSources.includes('screen') ? 'text-amber-500' : 'text-slate-600'" />
+                </div>
+                <div class="text-center">
+                  <span class="block font-black uppercase tracking-[0.2em] text-sm mb-1" :class="selectedSources.includes('screen') ? 'text-amber-500' : 'text-slate-600'">{{ $t('source_select.screen_share') }}</span>
+                  <span class="block text-[9px] font-bold text-slate-500 uppercase tracking-widest opacity-60">High Quality Stream</span>
+                </div>
+                <div v-if="selectedSources.includes('screen')" class="absolute top-6 right-6 text-amber-500">
+                  <CheckCircle2 class="w-6 h-6 fill-amber-500/10" />
+                </div>
+              </button>
 
-            <button @click="handleStartCasting('camera')"
-              class="flex items-center gap-6 p-6 bg-slate-900 border border-slate-800 rounded-[2rem] hover:border-amber-500 transition-all group text-left">
-              <div
-                class="w-16 h-16 bg-slate-950 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Camera class="w-8 h-8 text-amber-500" />
+              <!-- Camera Card -->
+              <button @click="toggleSource('camera')"
+                class="flex flex-col items-center gap-6 p-10 bg-slate-900 border rounded-[2.5rem] transition-all group relative overflow-hidden"
+                :class="selectedSources.includes('camera') ? 'border-amber-500 bg-amber-500/5 shadow-[0_0_40px_-10px_rgba(245,158,11,0.2)]' : 'border-slate-800 border-dashed hover:border-slate-600 hover:bg-slate-800/30'">
+                <div
+                  class="w-20 h-20 bg-slate-950 rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-xl">
+                  <Camera class="w-10 h-10" :class="selectedSources.includes('camera') ? 'text-amber-500' : 'text-slate-600'" />
+                </div>
+                <div class="text-center">
+                  <span class="block font-black uppercase tracking-[0.2em] text-sm mb-1" :class="selectedSources.includes('camera') ? 'text-white' : 'text-slate-600'">{{ $t('source_select.camera') }}</span>
+                  <span class="block text-[9px] font-bold text-slate-500 uppercase tracking-widest opacity-60">Live Video Feed</span>
+                </div>
+                <div v-if="selectedSources.includes('camera')" class="absolute top-6 right-6 text-amber-500">
+                  <CheckCircle2 class="w-6 h-6 fill-amber-500/10" />
+                </div>
+              </button>
+            </div>
+
+            <!-- Microphone Selection Bar -->
+            <button @click="toggleSource('mic')"
+              class="w-full flex items-center justify-between px-8 py-5 bg-slate-900 border rounded-[1.5rem] transition-all group relative overflow-hidden"
+              :class="selectedSources.includes('mic') ? 'border-amber-500 bg-amber-500/5' : 'border-slate-800 border-dashed hover:border-slate-600'">
+              <div class="flex items-center gap-5">
+                <div class="w-10 h-10 bg-slate-950 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
+                  <Volume2 v-if="selectedSources.includes('mic')" class="w-5 h-5 text-amber-500" />
+                  <VolumeX v-else class="w-5 h-5 text-slate-600" />
+                </div>
+                <div class="text-left">
+                  <span class="block font-black uppercase tracking-widest text-xs" :class="selectedSources.includes('mic') ? 'text-white' : 'text-slate-500'">{{ $t('source_select.microphone') }}</span>
+                  <span class="block text-[8px] font-bold text-slate-500 uppercase tracking-tighter opacity-50">Sync audio from your device</span>
+                </div>
               </div>
-              <div>
-                <span class="block font-black uppercase tracking-widest text-lg">{{ $t('source_select.camera') }}</span>
-                <p class="text-[10px] text-slate-500 uppercase font-bold mt-1">
-                  {{ $t('source_select.mobile_broadcast') }}
-                </p>
+              <div class="flex items-center gap-3">
+                 <span class="text-[10px] font-black uppercase tracking-widest" :class="selectedSources.includes('mic') ? 'text-amber-500' : 'text-slate-600'">
+                   {{ selectedSources.includes('mic') ? 'ON' : 'OFF' }}
+                 </span>
+                 <div class="w-10 h-5 bg-slate-950 rounded-full border border-slate-800 p-1 relative transition-colors"
+                      :class="{ 'bg-amber-500/20 border-amber-500/50': selectedSources.includes('mic') }">
+                   <div class="w-3 h-3 rounded-full bg-slate-700 transition-all duration-300 transform"
+                        :class="selectedSources.includes('mic') ? 'translate-x-5 bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'translate-x-0'"></div>
+                 </div>
               </div>
             </button>
           </div>
-          <button @click="appState = STATES.LANDING"
-            class="mt-12 text-slate-500 font-black uppercase tracking-widest text-[10px] hover:text-white transition-colors">
-            {{ $t('source_select.cancel') }}
-          </button>
+
+          <div class="mt-12 flex flex-col items-center gap-6">
+            <button @click="handleStartCasting"
+              class="px-12 py-4 bg-amber-500 text-slate-950 font-black rounded-2xl uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-amber-500/20">
+              {{ $t('source_select.start_broadcast') }}
+            </button>
+            <button @click="appState = STATES.LANDING"
+              class="text-slate-500 font-black uppercase tracking-widest text-[10px] hover:text-white transition-colors">
+              {{ $t('source_select.cancel') }}
+            </button>
+          </div>
         </div>
 
         <!-- Sender View -->
@@ -669,7 +796,7 @@ const resetApp = (forceLanding = false) => {
                   <span class="text-[10px] font-black uppercase">{{ isMicMuted ? $t('sender.muted') : $t('sender.mic_on')
                     }}</span>
                 </button>
-                <button v-if="castingMode === 'camera'" @click="toggleCamera"
+                <button v-if="selectedSources.includes('camera')" @click="toggleCamera"
                   class="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-full hover:bg-amber-500 hover:text-slate-950 transition-all">
                   <Repeat class="w-3 h-3" />
                   <span class="text-[10px] font-black uppercase">{{
@@ -697,15 +824,33 @@ const resetApp = (forceLanding = false) => {
               </div>
             </div>
 
-            <div
-              class="aspect-video bg-black rounded-3xl border border-slate-800 overflow-hidden relative mb-8 group shadow-inner">
-              <video ref="localVideo" autoplay muted playsinline class="w-full h-full object-cover" />
-              <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-              <div class="absolute bottom-4 left-6 flex items-center gap-3">
-                <div class="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
-                <span class="text-[10px] font-black uppercase tracking-widest">{{
-                  castingMode === "screen" ? $t('sender.desktop_mirror') : $t('sender.camera_feed')
-                }}</span>
+            <div class="grid gap-4 mb-8" :class="localScreenStream && localCameraStream ? 'grid-cols-2' : 'grid-cols-1'">
+              <!-- Screen Preview -->
+              <div v-if="localScreenStream"
+                class="aspect-video bg-black rounded-3xl border border-slate-800 overflow-hidden relative group shadow-inner">
+                <video ref="localScreenVideo" autoplay muted playsinline class="w-full h-full object-cover" />
+                <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                <div class="absolute bottom-4 left-6 flex items-center gap-3">
+                  <div class="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
+                  <span class="text-[8px] font-black uppercase tracking-widest">{{ $t('source_select.screen_share') }}</span>
+                </div>
+              </div>
+
+              <!-- Camera Preview -->
+              <div v-if="localCameraStream"
+                class="aspect-video bg-black rounded-3xl border border-slate-800 overflow-hidden relative group shadow-inner">
+                <video ref="localCameraVideo" autoplay muted playsinline class="w-full h-full object-cover" />
+                <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                <div class="absolute bottom-4 left-6 flex items-center gap-3">
+                  <div class="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
+                  <span class="text-[8px] font-black uppercase tracking-widest">{{ $t('source_select.camera') }}</span>
+                </div>
+              </div>
+
+              <!-- Fallback (if somehow streams not split) -->
+              <div v-if="!localScreenStream && !localCameraStream"
+                class="aspect-video bg-black rounded-3xl border border-slate-800 overflow-hidden relative group shadow-inner">
+                <video ref="localVideo" autoplay muted playsinline class="w-full h-full object-cover" />
               </div>
             </div>
 
@@ -800,54 +945,126 @@ const resetApp = (forceLanding = false) => {
         </div>
 
         <!-- Receiver Active -->
-        <div v-else-if="appState === STATES.RECEIVER_ACTIVE"
-          class="fixed inset-0 bg-black flex items-center justify-center overflow-hidden" @mousemove="handleMouseMove"
-          @touchstart="handleMouseMove">
-          <video ref="remoteVideo" autoplay playsinline class="w-full h-full object-contain bg-black" />
-
-          <!-- Overlay Controls -->
-          <div
-            class="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/60 transition-opacity duration-300 pointer-events-none"
-            :class="{ 'opacity-0': !showControls }"></div>
-
-          <div class="absolute top-6 left-6 transition-opacity duration-300 z-10"
-            :class="{ 'opacity-0': !showControls }">
-            <button @click="resetApp"
-              class="flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md rounded-full text-white/90 hover:bg-white/20 transition-all font-bold text-sm">
-              <ArrowLeft class="w-4 h-4" /> {{ $t('active.leave') }}
-            </button>
-          </div>
-
-          <div
-            class="absolute bottom-10 left-0 w-full px-8 flex items-end justify-between transition-opacity duration-300 z-10"
-            :class="{ 'opacity-0': !showControls }">
-            <div>
-              <div class="flex items-center gap-2 mb-2">
-                <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                <span class="text-red-500 text-[10px] font-black uppercase tracking-widest">{{ $t('active.live_feed')
-                  }}</span>
+        <div v-else-if="appState === STATES.RECEIVER_ACTIVE" 
+          class="fixed inset-0 bg-black flex items-center justify-center overflow-hidden" 
+          @mousemove="handleDragMove"
+          @mouseup="handleDragEnd"
+          @touchstart="handleMouseMove"
+          @touchmove="handleDragMove"
+          @touchend="handleDragEnd">
+          
+          <div :class="['relative w-full h-full flex transition-all duration-500 ease-in-out', 
+                        layoutMode === 'side-by-side' ? 'p-2 gap-0' : '']">
+            
+            <!-- Stream A (Primary) -->
+            <div :class="['relative overflow-hidden bg-slate-900 transition-all duration-500', 
+                          layoutMode === 'pip' ? 'w-full h-full' : 'rounded-2xl']"
+                 :style="layoutMode === 'side-by-side' ? { width: (splitRatio * 100) + '%' } : (layoutMode === 'pip' && isSwapped ? 'order: 2' : '')">
+              <video :ref="isSwapped ? 'cameraVideo' : 'screenVideo'" 
+                     autoplay playsinline 
+                     :muted="isMuted"
+                     class="w-full h-full object-contain" />
+              <div v-if="layoutMode === 'side-by-side'" class="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold text-white uppercase tracking-widest">
+                {{ isSwapped ? 'Camera' : 'Screen' }}
               </div>
-              <h3 class="text-white font-bold text-lg">
-                {{ $t('active.stream_title') }}
-                <span v-if="remoteDeviceInfo" class="ml-2 text-[10px] text-slate-400 font-medium bg-white/5 px-2 py-0.5 rounded-full border border-white/10 uppercase tracking-wider">
-                  {{ remoteDeviceInfo }}
-                </span>
-              </h3>
             </div>
 
-
-            <div class="flex items-center gap-4">
-              <button @click="toggleMute"
-                class="p-3 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white/20 transition-all active:scale-95">
-                <VolumeX v-if="isMuted" class="w-6 h-6" />
-                <Volume2 v-else class="w-6 h-6" />
-              </button>
-              <button @click="toggleFullscreen"
-                class="p-3 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white/20 transition-all active:scale-95">
-                <Maximize class="w-6 h-6" />
-              </button>
+            <!-- Splitter Bar (Only in side-by-side) -->
+            <div v-if="layoutMode === 'side-by-side' && cameraStream && screenStream"
+                 @mousedown="handleDragStart($event, 'splitter')"
+                 class="w-2 hover:w-4 -mx-1 hover:-mx-2 z-30 cursor-col-resize flex items-center justify-center transition-all group">
+              <div class="h-12 w-1 bg-white/20 rounded-full group-hover:bg-amber-500 transition-colors"></div>
             </div>
+
+            <!-- Stream B (Secondary/PiP Window) -->
+            <div v-if="cameraStream && screenStream"
+                 :class="['overflow-hidden shadow-2xl transition-all group', 
+                          layoutMode === 'pip' ? 'absolute rounded-xl border border-white/20 cursor-move z-20 hover:border-amber-500/50' : 'relative rounded-2xl bg-slate-900']"
+                 :style="layoutMode === 'pip' ? { 
+                    left: pipPosition.x + 'px', 
+                    top: pipPosition.y + 'px',
+                    width: pipWidth + 'px',
+                    aspectRatio: '16/9',
+                    order: isSwapped ? 1 : 2,
+                    transition: isDragging ? 'none' : 'all 0.5s ease-in-out'
+                 } : { width: ((1 - splitRatio) * 100) + '%' }"
+                 @mousedown="handleDragStart($event, 'move-pip')"
+                 @touchstart="handleDragStart($event, 'move-pip')">
+              <video :ref="isSwapped ? 'screenVideo' : 'cameraVideo'" 
+                     autoplay playsinline 
+                     :muted="isMuted"
+                     class="w-full h-full object-cover pointer-events-none" />
+              
+              <div v-if="layoutMode === 'side-by-side'" class="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold text-white uppercase tracking-widest">
+                {{ isSwapped ? 'Screen' : 'Camera' }}
+              </div>
+
+              <!-- Resize Handle (Only in PiP) -->
+              <div v-if="layoutMode === 'pip'" 
+                   @mousedown.stop="handleDragStart($event, 'resize-pip')"
+                   class="absolute bottom-0 right-0 w-8 h-8 cursor-nwse-resize flex items-end justify-end p-1 group/resize">
+                <div class="w-4 h-4 text-white/40 group-hover/resize:text-amber-500 transition-colors">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 19l4-4M10 19l9-9"/></svg>
+                </div>
+              </div>
+
+               <!-- Drag hint -->
+               <div v-if="layoutMode === 'pip'" class="absolute top-2 right-2 p-1 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                 <Maximize class="w-3 h-3 text-white" />
+               </div>
+            </div>
+
+            <!-- Fallback single stream -->
+            <video v-if="!cameraStream || !screenStream" ref="remoteVideo" autoplay playsinline :muted="isMuted" class="w-full h-full object-contain" />
+
           </div>
+
+          <!-- Interaction Sensing Zone (Bottom area) -->
+          <div class="absolute bottom-0 left-0 w-full h-40 z-40"
+               @mousemove="handleMouseMove"></div>
+
+          <!-- Unified Bottom Control Bar -->
+          <Transition name="fade">
+            <div v-if="showControls"
+              class="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-6 z-50 p-3 bg-black/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 shadow-2xl">
+              
+              <!-- Left: Leave Button -->
+              <button @click="resetApp"
+                class="flex items-center gap-2 px-5 py-3 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all font-black text-xs uppercase tracking-widest active:scale-95">
+                <LogOut class="w-4 h-4" /> {{ $t('active.leave') }}
+              </button>
+
+              <div class="w-px h-8 bg-white/10"></div>
+
+              <!-- Center: Primary Controls -->
+              <div class="flex items-center gap-2">
+                <button @click="toggleLayout" title="Toggle Layout"
+                  class="p-4 bg-white/5 rounded-full text-white hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-95 group">
+                  <Monitor v-if="layoutMode === 'pip'" class="w-6 h-6" />
+                  <div v-else class="flex gap-0.5">
+                    <div class="w-2.5 h-4 bg-current rounded-sm"></div>
+                    <div class="w-2.5 h-4 bg-current rounded-sm"></div>
+                  </div>
+                </button>
+
+                <button @click="swapStreams" title="Swap Streams"
+                  class="p-4 bg-white/5 rounded-full text-white hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-95">
+                  <Repeat class="w-6 h-6" />
+                </button>
+
+                <button @click="toggleMute"
+                  class="p-4 bg-white/5 rounded-full text-white hover:bg-white/10 transition-all active:scale-95"
+                  :class="{ 'bg-red-500/20 text-red-500': isMuted }">
+                  <component :is="isMuted ? VolumeX : Volume2" class="w-6 h-6" />
+                </button>
+                
+                <button @click="toggleFullscreen"
+                  class="p-4 bg-white/5 rounded-full text-white hover:bg-white/10 transition-all active:scale-95">
+                  <Maximize class="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+          </Transition>
         </div>
       </Transition>
     </main>
@@ -979,5 +1196,25 @@ const resetApp = (forceLanding = false) => {
 .fade-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+/* New Layout Transitions */
+.grid {
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+video {
+  transition: filter 0.3s ease;
+}
+
+.cursor-move:active {
+  cursor: grabbing;
+}
+
+/* Ensure smooth transition for all layout-related classes */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 500ms;
 }
 </style>

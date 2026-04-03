@@ -388,11 +388,16 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   String? _peerId;
   bool _isScreenSharing = false;
-  bool _isMuted = true;
+  bool _isMuted = false;
   bool _isLoading = false;
   bool _isStopping = false;
   String? _remoteDeviceInfo;
   bool _isConnected = false;
+
+  // Source Selection
+  bool _shareScreen = true;
+  bool _shareCamera = false;
+  bool _shareMic = true;
 
   Timer? _limitTimer;
   int _remainingSeconds = 180;
@@ -405,16 +410,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     WakelockPlus.enable();
   }
 
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     debugPrint("📱 AppLifecycleState changed: $state");
-    // 锁屏或切后台时，确保音频会话依然保持但不销毁 WebRTC
-    if (state == AppLifecycleState.paused) {
-      debugPrint("🌙 App paused (Locked/Background)");
-    } else if (state == AppLifecycleState.resumed) {
-      debugPrint("☀️ App resumed");
-    }
   }
 
   void _toggleMute() {
@@ -427,94 +425,102 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     });
   }
 
-  Future<void> _startBroadcast(bool isScreen) async {
+  Future<void> _startBroadcast() async {
+    if (!_shareScreen && !_shareCamera) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select at least one video source (Screen or Camera).")));
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       final code = (100000 + math.Random().nextInt(900000)).toString();
+      _localStream = null;
       
-      Map<String, dynamic> constraints = {
-        'audio': false,
-        'video': isScreen ? true : {
-          'facingMode': 'user',
-          'width': 1280,
-          'height': 720,
-          'frameRate': 30,
-        }
-      };
-
-      if (isScreen) {
+      // 1. Screen Sharing
+      if (_shareScreen) {
+        MediaStream? screenStream;
         if (Platform.isAndroid) {
           var status = await Permission.notification.status;
           if (status.isDenied) status = await Permission.notification.request();
-          if (!status.isGranted) {
-            setState(() => _isLoading = false);
-            return;
+          if (status.isGranted) {
+            await const MethodChannel('castnow_picker').invokeMethod('startMediaProjectionService', {'type': 'mediaProjection', 'code': code});
+            screenStream = await navigator.mediaDevices.getDisplayMedia({'video': true, 'audio': false});
           }
-          await const MethodChannel('castnow_picker').invokeMethod('startMediaProjectionService', {'type': 'mediaProjection', 'code': code});
-        }
-        if (Platform.isIOS) {
-          _localStream = await navigator.mediaDevices.getDisplayMedia({
+        } else if (Platform.isIOS) {
+          screenStream = await navigator.mediaDevices.getDisplayMedia({
             'video': {'deviceId': 'broadcast'},
             'audio': false
           });
-          // 同时开启主 App 麦克风音频以获取后台音频权限
-          try {
-            if (!kIsWeb) await Permission.microphone.request();
-            MediaStream audioStream = await navigator.mediaDevices.getUserMedia({
-              'audio': true,
-              'video': false
-            });
-            if (audioStream.getAudioTracks().isNotEmpty) {
-              _localStream!.addTrack(audioStream.getAudioTracks()[0]);
-            }
-          } catch (e) {
-            debugPrint("❌ Failed to start microphone: $e");
-          }
         } else {
-          _localStream = await navigator.mediaDevices.getDisplayMedia({'audio': false});
+          screenStream = await navigator.mediaDevices.getDisplayMedia({'video': true, 'audio': false});
         }
-      } else {
-        debugPrint("📸 [CASTNOW] Starting Camera Mode...");
-        if (!kIsWeb) {
-          await Permission.camera.request();
-          await Permission.microphone.request();
+
+        if (screenStream != null && screenStream.getVideoTracks().isNotEmpty) {
+          var track = screenStream.getVideoTracks()[0];
+          _localStream ??= screenStream; 
+          if (_localStream != screenStream) {
+            _localStream!.addTrack(track);
+          }
         }
-        
-        // --- 核心修复：iOS Camera 最稳采集方案 ---
-        // 直接在 getUserMedia 中同时请求音轨（附带降噪约束强制激活系统麦克风机制）和视轨
-        try {
-          _localStream = await navigator.mediaDevices.getUserMedia({
-            'audio': {
-               'echoCancellation': true,
-               'noiseSuppression': true,
-               'autoGainControl': true,
-            },
-            'video': constraints['video']
-          });
-          debugPrint("✅ [CASTNOW] Camera + Mic acquired successfully. Tracks: ${_localStream?.getTracks().length}");
-        } catch (e) {
-          debugPrint("❌ [CASTNOW] Failed to get Camera/Mic: $e");
-          setState(() { _isLoading = false; });
-          return;
+      }
+
+      // 2. Camera View
+      if (_shareCamera) {
+        if (!kIsWeb) await Permission.camera.request();
+        MediaStream camStream = await navigator.mediaDevices.getUserMedia({
+          'audio': false,
+          'video': {
+            'facingMode': 'user',
+            'width': 1280,
+            'height': 720,
+            'frameRate': 30,
+          }
+        });
+        if (camStream.getVideoTracks().isNotEmpty) {
+          var track = camStream.getVideoTracks()[0];
+          if (_localStream == null) {
+            _localStream = camStream;
+          } else {
+            _localStream!.addTrack(track);
+          }
         }
+      }
+
+      // 3. Microphone
+      if (_shareMic) {
+        if (!kIsWeb) await Permission.microphone.request();
+        MediaStream micStream = await navigator.mediaDevices.getUserMedia({
+          'audio': {
+            'echoCancellation': true,
+            'noiseSuppression': true,
+            'autoGainControl': true,
+          },
+          'video': false
+        });
+        if (micStream.getAudioTracks().isNotEmpty) {
+          var track = micStream.getAudioTracks()[0];
+          if (_localStream == null) {
+            _localStream = micStream;
+          } else {
+            _localStream!.addTrack(track);
+          }
+          track.enabled = !_isMuted;
+        }
+      }
+
+      if (_localStream == null) {
+        throw Exception("Failed to acquire any media stream.");
       }
 
       _localRenderer.srcObject = _localStream;
-      _isScreenSharing = isScreen;
+      _isScreenSharing = _shareScreen;
 
-      if (_localStream != null) {
-        for (var track in _localStream!.getAudioTracks()) {
-          track.enabled = !_isMuted;
-        }
-        for (var track in _localStream!.getTracks()) {
-          track.onEnded = () => _stopBroadcast();
-        }
+      for (var track in _localStream!.getTracks()) {
+        track.onEnded = () => _stopBroadcast();
       }
 
-      // --- 关键优化：推迟网络连接，等待权限确认和网络就绪 ---
-      debugPrint("⏳ Waiting for network readiness...");
       await Future.delayed(const Duration(milliseconds: 1000));
-      _connectWithRetry(code, isScreen, 0);
+      _connectWithRetry(code, _shareScreen, 0);
 
     } catch (e) {
       debugPrint("❌ Broadcast Start Error: $e");
@@ -522,36 +528,28 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     }
   }
 
-  // --- 新增：带自动重试的 Peer 初始化逻辑 ---
   void _connectWithRetry(String code, bool isScreen, int attempt) async {
-    if (attempt > 5) { // 最多重试 5 次
+    if (attempt > 5) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Network Connection Failed. Please check your data settings.")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Network Connection Failed.")));
       return;
     }
-
-    if (attempt > 0) debugPrint("🔄 Retrying Peer connection (Attempt $attempt)...");
 
     try {
       _peer?.dispose();
       _peer = Peer(id: code, options: PeerOptions(debug: LogLevel.All, config: {
         'iceServers': [
           {'urls': 'stun:stun.l.google.com:19302'},
-          {'urls': 'stun:stun.cloudflare.com:3478'},
           {'urls': 'stun:stun.miwifi.com:3478'},
-          {'urls': 'stun:stun.cdn.aliyun.com:3478'},
         ]
       }));
 
       _peer!.on("open").listen((id) {
-        debugPrint("✅ Peer connected successfully: $id");
         if (mounted) setState(() { _peerId = id; _isLoading = false; });
       });
 
       _peer!.on("error").listen((error) {
-        debugPrint("⚠️ Peer/Socket Error: $error");
-        // 如果是 DNS 或网络错误，触发自动重试
-        if (error.toString().contains("Failed host lookup") || error.toString().contains("SocketException")) {
+        if (error.toString().contains("Failed host lookup")) {
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted && _peerId == null) _connectWithRetry(code, isScreen, attempt + 1);
           });
@@ -565,34 +563,23 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
         if (_isScreenSharing && Platform.isAndroid) const MethodChannel('castnow_picker').invokeMethod('minimizeApp');
         
         if (_localStream != null && _localStream!.getTracks().isNotEmpty) {
-          final mediaConnection = _peer!.call(conn.peer, _localStream!);
-          mediaConnection.peerConnection?.onIceConnectionState = (state) {
-            debugPrint("🔥 [ICE Connection State]: ${state.toString()}");
-          };
+          _peer!.call(conn.peer, _localStream!);
         }
         if (mounted) setState(() => _isConnected = true);
       });
 
       if (!widget.isPro) {
         _limitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          if (!mounted) {
-            timer.cancel();
-            return;
-          }
+          if (!mounted) { timer.cancel(); return; }
           setState(() {
-            if (_remainingSeconds > 0) {
-              _remainingSeconds--;
-            } else {
-              timer.cancel();
-              _showTimeUpDialog();
-            }
+            if (_remainingSeconds > 0) { _remainingSeconds--; }
+            else { timer.cancel(); _showTimeUpDialog(); }
           });
         });
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
@@ -603,98 +590,30 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     if (Platform.isIOS) { model = (await devInfo.iosInfo).name; }
     else { model = (await devInfo.androidInfo).model; }
     
-    _remoteDeviceInfo = null;
-    debugPrint("PREPARING EXCHANGE for conn: ${conn.connectionId}");
-    
-    // Function to send data consistently
     void sendInfo() {
-      debugPrint("Sending app info to DC ${conn.connectionId}...");
-      conn.send({"type": "dev", "os": os, "model": model});
+      conn.send({
+        "type": "dev", 
+        "os": os, 
+        "model": model,
+      });
     }
 
-    // PeerDart: listen for 'data' regardless of 'open' state to avoid missing initial packets
     conn.on("data").listen((data) {
-      debugPrint("RAW DATA RECEIVED on DC ${conn.connectionId} (Type: ${data.runtimeType}): $data");
-      
-      if (data == null) {
-        debugPrint("⚠️ WARNING: RECEIVED NULL DATA on DC ${conn.connectionId}. This often indicates a serialization mismatch.");
-        return;
-      }
-      
       dynamic payload = data;
       if (data is String) {
-        try { payload = jsonDecode(data); } catch (e) { debugPrint("JSON Decode Error: $e"); }
+        try { payload = jsonDecode(data); } catch (_) {}
       }
-      
       if (payload is Map && payload["type"] == "dev") {
         String info = "${payload['os']} ${payload['model'] ?? ''}";
         if (payload['browser'] != null) info += " (${payload['browser']})";
         setState(() => _remoteDeviceInfo = info.trim());
-        debugPrint("SUCCESSFULLY SET _remoteDeviceInfo: $_remoteDeviceInfo");
       }
     });
 
-    // Fallback for binary data if Web side still sends binary (e.g. cache or old version)
-    conn.on("binary").listen((bytes) {
-      debugPrint("BINARY DATA RECEIVED (${bytes.length} bytes).");
-      try {
-        final str = utf8.decode(bytes);
-        debugPrint("DECODED BINARY TO STRING: $str");
-        final payload = jsonDecode(str);
-        if (payload is Map && payload["type"] == "dev") {
-           String info = "${payload['os']} ${payload['model'] ?? ''}";
-           if (payload['browser'] != null) info += " (${payload['browser']})";
-           if (_remoteDeviceInfo == null) setState(() => _remoteDeviceInfo = info.trim());
-        }
-      } catch (e) {
-        debugPrint("Binary decode as UTF-8 failed: $e. Message is likely msgpack/binary.");
-      }
-    });
-    
-    // Low-level fail-safe: Reach into RTCDataChannel if it's available
-    try {
-      final dc = (conn as dynamic).dataChannel as RTCDataChannel?;
-      if (dc != null) {
-        dc.onMessage = (message) {
-          debugPrint("LOWEST-LEVEL DC MESSAGE RECEIVED - Binary: ${message.isBinary}, Length: ${message.binary?.length ?? message.text?.length}");
-          if (!message.isBinary && message.text != null && _remoteDeviceInfo == null) {
-            try {
-              final payload = jsonDecode(message.text!);
-              if (payload is Map && payload["type"] == "dev") {
-                String info = "${payload['os']} ${payload['model'] ?? ''}";
-                if (payload['browser'] != null) info += " (${payload['browser']})";
-                setState(() => _remoteDeviceInfo = info.trim());
-              }
-            } catch (_) {}
-          } else if (message.isBinary && _remoteDeviceInfo == null) {
-             // Try one more time to decode the binary message directly from RTCDataChannelMessage
-             try {
-                final str = utf8.decode(message.binary!);
-                final payload = jsonDecode(str);
-                if (payload is Map && payload["type"] == "dev") {
-                   String info = "${payload['os']} ${payload['model'] ?? ''}";
-                   if (payload['browser'] != null) info += " (${payload['browser']})";
-                   setState(() => _remoteDeviceInfo = info.trim());
-                }
-             } catch (_) {}
-          }
-        };
-      }
-    } catch (_) {}
-
-    // Handle connection lifecycle
-    if (conn.open) {
-      sendInfo();
-    } else {
-      conn.on("open").listen((_) => sendInfo());
-    }
+    if (conn.open) { sendInfo(); } 
+    else { conn.on("open").listen((_) => sendInfo()); }
 
     conn.on("close").listen((_) {
-      if (mounted) setState(() { _isConnected = false; _remoteDeviceInfo = null; });
-    });
-    
-    conn.on("error").listen((err) {
-      debugPrint("DC ERROR (${conn.connectionId}): $err");
       if (mounted) setState(() { _isConnected = false; _remoteDeviceInfo = null; });
     });
   }
@@ -706,10 +625,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     if (Platform.isAndroid) const MethodChannel('castnow_picker').invokeMethod('stopMediaProjectionService');
     _localStream?.dispose();
     _localRenderer.srcObject = null;
-    if (_isScreenSharing && Platform.isIOS) await Future.delayed(const Duration(seconds: 4));
-    if (mounted) {
-      Navigator.pop(context);
-    }
+    if (mounted) { Navigator.pop(context); }
   }
 
   void _showTimeUpDialog() {
@@ -730,6 +646,34 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     super.dispose();
   }
 
+  Widget _buildControl({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(color: color.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSourceTile(IconData icon, String label, bool value, Function(bool?) onChanged) {
+    return CheckboxListTile(
+      value: value,
+      onChanged: onChanged,
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: kTextPrimary)),
+      secondary: Icon(icon, color: value ? kPrimaryColor : kTextSecondary),
+      contentPadding: EdgeInsets.zero,
+      activeColor: kPrimaryColor,
+      checkColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      controlAffinity: ListTileControlAffinity.trailing,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_peerId == null && !_isLoading) {
@@ -739,9 +683,47 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildBtn(Icons.phone_android, "Screen Share", () => _startBroadcast(true)),
-              const SizedBox(height: 20),
-              _buildBtn(Icons.camera_alt, "Camera Share", () => _startBroadcast(false)),
+              Container(
+                constraints: const BoxConstraints(maxWidth: 320),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: kSurfaceColor,
+                  borderRadius: BorderRadius.circular(32),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Column(
+                  children: [
+                    _buildSourceTile(Icons.phone_android, "Screen Desktop", _shareScreen, (val) => setState(() => _shareScreen = val!)),
+                    const Divider(color: Colors.white10, height: 32),
+                    _buildSourceTile(Icons.camera_alt, "Camera View", _shareCamera, (val) => setState(() => _shareCamera = val!)),
+                    const Divider(color: Colors.white10, height: 32),
+                    _buildSourceTile(Icons.mic, "Microphone", _shareMic, (val) => setState(() => _shareMic = val!)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 40),
+              SizedBox(
+                width: 280,
+                child: ElevatedButton(
+                  onPressed: _startBroadcast,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    elevation: 8,
+                    shadowColor: kPrimaryColor.withOpacity(0.5),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.bolt_rounded),
+                      SizedBox(width: 12),
+                      Text("START BROADCAST", style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -848,7 +830,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
                         ],
                       ),
                     ),
-                  const SizedBox(height: 180), // Spacer for controls
+                  const SizedBox(height: 180),
                 ],
               ),
             ),
@@ -885,33 +867,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       ),
     );
   }
-
-  Widget _buildControl({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(height: 4),
-          Text(label, style: TextStyle(color: color.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBtn(IconData icon, String label, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: Container(
-        width: 260, padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(color: kSurfaceColor, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white10)),
-        child: Column(children: [Icon(icon, size: 48, color: kPrimaryColor), const SizedBox(height: 16), Text(label, style: const TextStyle(fontWeight: FontWeight.bold))]),
-      ),
-    );
-  }
 }
+
 
 // --- Receive Screen (Simplified) ---
 class ReceiveScreen extends StatefulWidget {

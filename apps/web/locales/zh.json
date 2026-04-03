@@ -23,6 +23,8 @@
         "experimental_android": "实验性 (仅限安卓)",
         "system_mirroring": "系统镜像",
         "mobile_broadcast": "移动端发起",
+        "start_broadcast": "开始投屏",
+        "microphone": "麦克风",
         "cancel": "← 取消操作"
     },
     "sender": {
@@ -34,7 +36,8 @@
         "camera_feed": "摄像头画面",
         "terminate": "结束投屏",
         "muted": "已静音",
-        "mic_on": "麦克风"
+        "mic_on": "麦克风",
+        "active_sync": "多源同步传输中"
     },
     "receiver": {
         "title": "输入访问码",
@@ -56,7 +59,8 @@
         "network_error": "网络错误。请检查连接或防火墙。",
         "conn_failed": "连接失败。请检查访问码。",
         "service_error": "服务错误。请稍后再试。",
-        "camera_switch_failed": "摄像头切换失败"
+        "camera_switch_failed": "摄像头切换失败",
+        "select_at_least_one": "请至少选择一个源"
     },
     "ended": {
         "title": "投屏已结束",

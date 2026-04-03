@@ -23,6 +23,8 @@
         "experimental_android": "Experimental (Android Only)",
         "system_mirroring": "System Mirroring",
         "mobile_broadcast": "Mobile Broadcast",
+        "start_broadcast": "Start Broadcasting",
+        "microphone": "Microphone",
         "cancel": "← Cancel Operation"
     },
     "sender": {
@@ -34,7 +36,8 @@
         "camera_feed": "Camera Feed",
         "terminate": "Terminate Stream",
         "muted": "Muted",
-        "mic_on": "Mic On"
+        "mic_on": "Mic On",
+        "active_sync": "Syncing Multi-Source"
     },
     "receiver": {
         "title": "Enter Access Key",
@@ -56,7 +59,8 @@
         "network_error": "Network error. Check connection/firewall.",
         "conn_failed": "Connection failed. Check code.",
         "service_error": "Service error. Please try again later.",
-        "camera_switch_failed": "Camera switch failed"
+        "camera_switch_failed": "Camera switch failed",
+        "select_at_least_one": "Select at least one source"
     },
     "ended": {
         "title": "Broadcast Ended",
