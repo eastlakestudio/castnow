@@ -4,3 +4,5 @@ dist
 .env
 appstore/
 android_store/
+apps/mobile_pro/build/
+apps/mobile/ios/build/

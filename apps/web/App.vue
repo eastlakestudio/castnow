@@ -196,23 +196,13 @@ const getDeviceInfo = () => {
 
 // --- WebRTC Core ---
 const getIceServers = () => {
-  const isChina = () => {
-    try {
-      const locale = navigator.language || "";
-      return locale.toLowerCase().includes("zh");
-    } catch (e) {
-      return false;
-    }
-  };
-  return isChina()
-    ? [
-      { urls: "stun:stun.miwifi.com:3478" },
-      { urls: "stun:stun.cdn.aliyun.com:3478" },
-    ]
-    : [
-      { urls: "stun:stun.cloudflare.com:3478" },
-      { urls: "stun:stun.l.google.com:19302" },
-    ];
+  return [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun.miwifi.com:3478" },
+    { urls: "stun:stun.cdn.aliyun.com:3478" },
+    { urls: "stun:stun.cloudflare.com:3478" },
+    { urls: "stun:stun.tuna.tsinghua.edu.cn:3478" },
+  ];
 };
 
 // --- Sender Logic ---
@@ -1083,8 +1073,9 @@ const resetApp = (forceLanding = false) => {
                         layoutMode === 'side-by-side' ? 'p-2 gap-0' : '',
                         isDragging ? 'no-transition' : 'transition-all duration-500']">
             
-            <!-- Stream A (Primary) -->
-            <div :class="['relative overflow-hidden bg-slate-900 flex items-center justify-center', 
+            <!-- Stream A (Primary) - Only show in dual-stream mode -->
+            <div v-if="cameraStream && screenStream"
+                 :class="['relative overflow-hidden bg-slate-900 flex items-center justify-center', 
                           layoutMode === 'pip' ? 'w-full h-full' : 'rounded-2xl',
                           isDragging ? 'no-transition' : 'transition-all duration-500']"
                  :style="layoutMode === 'side-by-side' ? { width: (splitRatio * 100) + '%' } : (layoutMode === 'pip' && isSwapped ? 'order: 2' : '')">
@@ -1168,19 +1159,21 @@ const resetApp = (forceLanding = false) => {
 
                 <!-- Center: Primary Controls -->
                 <div class="flex items-center gap-2">
-                  <button @click="toggleLayout" title="Toggle Layout"
-                    class="p-4 bg-white/5 rounded-full text-white hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-95 group">
-                    <Monitor v-if="layoutMode === 'pip'" class="w-6 h-6" />
-                    <div v-else class="flex gap-0.5">
-                      <div class="w-2.5 h-4 bg-current rounded-sm"></div>
-                      <div class="w-2.5 h-4 bg-current rounded-sm"></div>
-                    </div>
-                  </button>
+                  <template v-if="cameraStream && screenStream">
+                    <button @click="toggleLayout" title="Toggle Layout"
+                      class="p-4 bg-white/5 rounded-full text-white hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-95 group">
+                      <Monitor v-if="layoutMode === 'pip'" class="w-6 h-6" />
+                      <div v-else class="flex gap-0.5">
+                        <div class="w-2.5 h-4 bg-current rounded-sm"></div>
+                        <div class="w-2.5 h-4 bg-current rounded-sm"></div>
+                      </div>
+                    </button>
 
-                  <button @click="swapStreams" title="Swap Streams"
-                    class="p-4 bg-white/5 rounded-full text-white hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-95">
-                    <Repeat class="w-6 h-6" />
-                  </button>
+                    <button @click="swapStreams" title="Swap Streams"
+                      class="p-4 bg-white/5 rounded-full text-white hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-95">
+                      <Repeat class="w-6 h-6" />
+                    </button>
+                  </template>
 
                   <button @click="toggleMute"
                     class="p-4 bg-white/5 rounded-full text-white hover:bg-white/10 transition-all active:scale-95"

@@ -45,13 +45,6 @@ import ReplayKit
     }
   }
 
-  override func application(
-    _ application: UIApplication,
-    configurationForConnecting connectingSceneSession: UISceneSession,
-    options: UIScene.ConnectionOptions
-  ) -> UISceneConfiguration {
-    return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
-  }
 
   // --- Background Task Management for persistence during lock ---
   private var backgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
@@ -71,6 +64,10 @@ import ReplayKit
         application.endBackgroundTask(backgroundTaskIdentifier)
         backgroundTaskIdentifier = .invalid
     }
+  }
+
+  override func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+    return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
   }
 }
 
