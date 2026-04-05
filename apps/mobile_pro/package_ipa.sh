@@ -8,13 +8,27 @@ EXPORT_PATH="$PROJECT_DIR/build/ios/ipa"
 PLIST_PATH="$PROJECT_DIR/ios/ExportOptions.plist"
 
 echo "------------------------------------------------"
-echo "Phase 1: Building Archive..."
+echo "Phase 1: Building Flutter Resources..."
 echo "------------------------------------------------"
 cd "$PROJECT_DIR"
-flutter build ipa --release --no-codesign
+flutter build ios --release --no-codesign
 
 echo "------------------------------------------------"
-echo "Phase 2: Exporting IPA..."
+echo "Phase 2: Building Xcode Archive (Manual Signing)..."
+echo "------------------------------------------------"
+# Clean up old archive
+rm -rf "$ARCHIVE_PATH"
+
+# Run xcodebuild archive directly to ensure entitlements are preserved
+xcodebuild archive \
+    -workspace ios/Runner.xcworkspace \
+    -scheme Runner \
+    -configuration Release \
+    -archivePath "$ARCHIVE_PATH" \
+    CODE_SIGNING_ALLOWED=NO
+
+echo "------------------------------------------------"
+echo "Phase 3: Exporting IPA..."
 echo "Archive: $ARCHIVE_PATH"
 echo "Export Options: $PLIST_PATH"
 echo "------------------------------------------------"

@@ -11,8 +11,15 @@
     <key>compileBitcode</key>
     <false/>
     <key>uploadSymbols</key>
-    <true/>
+    <false/>
     <key>signingStyle</key>
-    <string>automatic</string>
+    <string>manual</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.eastlakestudio.castnow.pro</key>
+        <string>castnow.pro</string>
+        <key>com.eastlakestudio.castnow.pro.BroadcastExtension</key>
+        <string>broadcastextension.castnow.pro</string>
+    </dict>
 </dict>
 </plist>
