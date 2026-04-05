@@ -22,6 +22,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   bool _isConnecting = false;
   CastNowLayoutMode _layoutMode = CastNowLayoutMode.pip;
   bool _isSwapped = false;
+  MediaStream? _totalRemoteStream; // Track the full stream for audio control
+  
   
   // Status Monitoring
   String _peerStatus = "Initializing";
@@ -61,17 +63,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     setState(() {
       _isPlaybackMuted = !_isPlaybackMuted;
       
-      // On iOS/Android natively, RTCVideoRenderer.muted does not stop the WebRTC C++ Audio Mixer. 
-      // Furthermore, it throws an exception on remote tracks.
-      // We must explicitly disable the incoming remote audio tracks.
-      if (_remoteRenderer.srcObject != null) {
-        for (var t in _remoteRenderer.srcObject!.getAudioTracks()) {
-          t.enabled = !_isPlaybackMuted;
-          Helper.setVolume(_isPlaybackMuted ? 0.0 : 1.0, t);
-        }
-      }
-      if (_pipRenderer.srcObject != null) {
-        for (var t in _pipRenderer.srcObject!.getAudioTracks()) {
+      // Use the full remote stream to set volume/mute, as renderers now have video-only streams
+      if (_totalRemoteStream != null) {
+        for (var t in _totalRemoteStream!.getAudioTracks()) {
           t.enabled = !_isPlaybackMuted;
           Helper.setVolume(_isPlaybackMuted ? 0.0 : 1.0, t);
         }
@@ -240,9 +234,15 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       for (var t in s.getVideoTracks()) { debugPrint("   -> 🎬 Video Track: ${t.id} (enabled: ${t.enabled})"); }
       for (var t in s.getAudioTracks()) { debugPrint("   -> 🎤 Audio Track: ${t.id} (enabled: ${t.enabled})"); }
       
+      // Store full stream for audio track control
+      _totalRemoteStream = s;
+
       // Route audio to speakerphone natively (fixes iOS earpiece issue)
+      // Slight delay to avoid race conditions with video texture initialization
       if (s.getAudioTracks().isNotEmpty) {
-        Helper.setSpeakerphoneOn(true);
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) Helper.setSpeakerphoneOn(true);
+        });
       }
 
       if (mounted) {
@@ -251,12 +251,19 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           _isConnected = true;
           _isConnecting = false;
         });
-        _remoteRenderer.srcObject = s;
+        
+        // POTENTIAL FIX: Isolate VIDEO tracks for the renderers. 
+        // iOS RTCVideoView can SOMETIMES fail (black screen) if assigned a stream containing audio tracks.
+        if (s.getVideoTracks().isNotEmpty) {
+          MediaStream mainVideoStream = await createLocalMediaStream('remote_main_video');
+          mainVideoStream.addTrack(s.getVideoTracks()[0]);
+          _remoteRenderer.srcObject = mainVideoStream;
+        }
         
         if (s.getVideoTracks().length >= 2) {
-          MediaStream pipStream = await createLocalMediaStream('remote_pip');
-          pipStream.addTrack(s.getVideoTracks()[1]);
-          _pipRenderer.srcObject = pipStream;
+          MediaStream pipVideoStream = await createLocalMediaStream('remote_pip_video');
+          pipVideoStream.addTrack(s.getVideoTracks()[1]);
+          _pipRenderer.srcObject = pipVideoStream;
           if (mounted) {
             setState(() {
               _hasPip = true;
