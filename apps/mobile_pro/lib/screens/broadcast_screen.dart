@@ -72,8 +72,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     _cameraPreviewStream?.dispose();
     _limitTimer?.cancel();
     _clearPeerSubscriptions();
-    _peer?.dispose();
+    final p = _peer;
     _peer = null;
+    Future.delayed(const Duration(milliseconds: 500), () => p?.dispose());
     WakelockPlus.disable();
     super.dispose();
   }
@@ -156,7 +157,12 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
             }
           } else if (Platform.isIOS) {
             screenStream = await navigator.mediaDevices.getDisplayMedia({
-              'video': {'deviceId': 'broadcast'},
+              'video': {
+                'deviceId': 'broadcast',
+                'frameRate': 24,
+                'width': {'ideal': 1280},
+                'height': {'ideal': 720}
+              },
               'audio': false
             });
           } else {
@@ -267,12 +273,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       if (_peer != null) {
         debugPrint("🧹 [PEER] Cleaning up previous peer instance before retry...");
         _clearPeerSubscriptions();
-        try {
-          _peer!.dispose();
-        } catch (e) {
-          debugPrint("⚠️ [PEER] Dispose error (ignoring): $e");
-        }
+        final p = _peer;
         _peer = null;
+        Future.delayed(const Duration(milliseconds: 500), () {
+          try { p?.dispose(); } catch (e) { debugPrint("⚠️ [PEER] Dispose error (ignoring): $e"); }
+        });
         // Exponential backoff
         await Future.delayed(Duration(milliseconds: 500 + (attempt * 1000)));
       }
@@ -286,9 +291,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
         port: 443,
         path: '/',
         secure: true,
-        debug: LogLevel.All,
+        debug: LogLevel.Errors,
         config: {
-          'sdpSemantics': 'unified-plan',
           'iceServers': [
             {'urls': 'stun:stun.l.google.com:19302'},
             {'urls': 'stun:stun.miwifi.com:3478'},
@@ -403,6 +407,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     _peerSubscriptions.add(call.on("stream").listen(
       (remoteStream) {
         debugPrint("🎙️ [PEER] Received talkback stream!");
+        if (remoteStream.getAudioTracks().isNotEmpty) {
+          Helper.setSpeakerphoneOn(true);
+        }
         if (mounted) {
           setState(() {
             _isConnected = true;
@@ -428,8 +435,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     if (!mounted || _isStopping) return;
     setState(() => _isStopping = true);
     _clearPeerSubscriptions();
-    _peer?.dispose();
+    final p = _peer;
     _peer = null;
+    Future.delayed(const Duration(milliseconds: 500), () => p?.dispose());
     if (Platform.isAndroid) const MethodChannel('castnow_picker').invokeMethod('stopMediaProjectionService');
     _localStream?.dispose();
     _localRenderer.srcObject = null;
@@ -607,6 +615,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
                             subtitle: "Broadcast your entire iOS screen", 
                             value: _shareScreen, 
                             onChanged: (val) {
+                              HapticFeedback.selectionClick();
                               if (!val && !_shareCamera) return; // Force at least one
                               setState(() {
                                 _shareScreen = val;
@@ -620,6 +629,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
                             subtitle: "Share high-quality camera stream", 
                             value: _shareCamera, 
                             onChanged: (val) {
+                              HapticFeedback.selectionClick();
                               if (!val && !_shareScreen) return; // Force at least one
                               setState(() {
                                 _shareCamera = val;
@@ -632,7 +642,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
                             title: "HD Microphone", 
                             subtitle: "Capture crystal clear audio (Muted by default)", 
                             value: _shareMic, 
-                            onChanged: (val) => setState(() => _shareMic = val)
+                            onChanged: (val) {
+                              HapticFeedback.selectionClick();
+                              setState(() => _shareMic = val);
+                            }
                           ),
                         ],
                       ),
@@ -676,6 +689,52 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       );
     }
 
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
+    final statusOverlay = Positioned(
+      top: 12, left: 12, right: 12,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
+            child: Row(children: [
+              Icon(Icons.circle, color: _isConnected ? Colors.green : (_isScreenSharing ? Colors.blue : Colors.red), size: 8),
+              const SizedBox(width: 8),
+              Text(_isConnected ? "CONNECTED" : (_isScreenSharing ? "SHARING" : "ON AIR"), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              if (!widget.isPro) ...[
+                 const SizedBox(width: 8),
+                 Text("${(_remainingSeconds ~/ 60)}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}", style: const TextStyle(fontSize: 12)),
+              ]
+            ]),
+          ),
+          Container(
+            decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+            child: IconButton(onPressed: _stopBroadcast, icon: const Icon(Icons.close, color: Colors.white, size: 20)),
+          ),
+        ],
+      ),
+    );
+
+    final pairCodeWidget = _peerId != null ? Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text("SHARING ACCESS KEY", style: TextStyle(color: kTextSecondary, letterSpacing: 2, fontSize: 11, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: _peerId!.split('').map((char) => Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: kPrimaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: kPrimaryColor.withOpacity(0.3))),
+            child: Text(char, style: const TextStyle(color: kPrimaryColor, fontSize: 32, fontWeight: FontWeight.bold)),
+          )).toList()),
+        ),
+        if (!_isConnected) const SizedBox(height: 12),
+      ],
+    ) : const SizedBox.shrink();
+
     return Scaffold(
       backgroundColor: kBackgroundColor,
       body: SafeArea(
@@ -684,80 +743,46 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
             SingleChildScrollView(
               child: Column(
                 children: [
-                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
-                          child: Row(children: [
-                            Icon(Icons.circle, color: _isConnected ? Colors.green : (_isScreenSharing ? Colors.blue : Colors.red), size: 8),
-                            const SizedBox(width: 8),
-                            Text(_isConnected ? "CONNECTED" : (_isScreenSharing ? "SHARING" : "ON AIR"), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                            if (!widget.isPro) ...[
-                               const SizedBox(width: 8),
-                               Text("${(_remainingSeconds ~/ 60)}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}", style: const TextStyle(fontSize: 12)),
-                            ]
-                          ]),
-                        ),
-                        IconButton(onPressed: _stopBroadcast, icon: const Icon(Icons.close, color: Colors.white)),
-                      ],
-                    ),
-                  ),
                   Padding(
                     padding: const EdgeInsets.all(24.0),
-                    child: Container(
-                      height: MediaQuery.of(context).size.height * 0.35,
-                      decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white10)),
-                      clipBehavior: Clip.antiAlias,
-                      child: _localStream != null ? Builder(builder: (context) {
-                        final hasBoth = _isScreenSharing && _shareCamera;
+                    child: Stack(
+                      children: [
+                        Container(
+                          height: isLandscape ? MediaQuery.of(context).size.height * 0.45 : MediaQuery.of(context).size.height * 0.35,
+                          decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white10)),
+                          clipBehavior: Clip.antiAlias,
+                          child: _localStream != null ? Builder(builder: (context) {
+                            final hasBoth = _isScreenSharing && _shareCamera;
 
-                        if (!hasBoth) {
-                          final activeRenderer = _isScreenSharing ? _localRenderer : _cameraRenderer;
-                          return RTCVideoView(activeRenderer, mirror: _shareCamera && !_isScreenSharing);
-                        } else {
-                          final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-                          return Flex(
-                            direction: isLandscape ? Axis.horizontal : Axis.vertical,
-                            children: [
-                              // Screen sharing takes priority/equal space
-                              Expanded(child: RTCVideoView(_localRenderer, mirror: false)),
-                              Container(
-                                width: isLandscape ? 1 : double.infinity, 
-                                height: isLandscape ? double.infinity : 1, 
-                                color: Colors.white10
-                              ),
-                              // Camera view
-                              Expanded(child: RTCVideoView(_cameraRenderer, mirror: true)),
-                            ],
-                          );
-                        }
-                      }) : Container(),
+                            if (!hasBoth) {
+                              final activeRenderer = _isScreenSharing ? _localRenderer : _cameraRenderer;
+                              return RTCVideoView(activeRenderer, mirror: _shareCamera && !_isScreenSharing);
+                            } else {
+                              return Flex(
+                                direction: isLandscape ? Axis.horizontal : Axis.vertical,
+                                children: [
+                                  // Screen sharing takes priority/equal space
+                                  Expanded(child: RTCVideoView(_localRenderer, mirror: false)),
+                                  Container(
+                                    width: isLandscape ? 1 : double.infinity, 
+                                    height: isLandscape ? double.infinity : 1, 
+                                    color: Colors.white10
+                                  ),
+                                  // Camera view
+                                  Expanded(child: RTCVideoView(_cameraRenderer, mirror: true)),
+                                ],
+                              );
+                            }
+                          }) : Container(),
+                        ),
+                        if (_localStream != null) statusOverlay,
+                      ]
                     ),
                   ),
-                  if (_peerId != null)
+                  if (!isLandscape && _peerId != null)
                     Padding(
                       padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        children: [
-                          const Text("SHARING ACCESS KEY", style: TextStyle(color: kTextSecondary, letterSpacing: 2, fontSize: 11, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 16),
-                          Row(mainAxisAlignment: MainAxisAlignment.center, children: _peerId!.split('').map((char) => Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(color: kPrimaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: kPrimaryColor.withOpacity(0.3))),
-                            child: Text(char, style: const TextStyle(color: kPrimaryColor, fontSize: 32, fontWeight: FontWeight.bold)),
-                          )).toList()),
-                          if (!_isConnected) ...[
-                            const SizedBox(height: 12),
-                            // Tip bar removed from here as it's now in the fixed bottom overlay
-                          ],
-                           const SizedBox(height: 24),
-                        ],
-                      ),
+                      child: pairCodeWidget,
                     ),
                   const SizedBox(height: 180),
                 ],
@@ -792,19 +817,21 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
                   );
 
                   if (isLandscape) {
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        if (widget.isPro) ...[
-                          const Opacity(opacity: 0.8, child: Text("PRO EDITION", style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.cyanAccent, letterSpacing: 4, shadows: [Shadow(color: Colors.cyanAccent, blurRadius: 8)]))),
-                          const SizedBox(height: 12),
-                        ],
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.center,
+                        if (_peerId != null) Expanded(child: pairCodeWidget),
+                        const SizedBox(width: 16),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (widget.isPro) ...[
+                              const Opacity(opacity: 0.8, child: Text("PRO EDITION", style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.cyanAccent, letterSpacing: 4, shadows: [Shadow(color: Colors.cyanAccent, blurRadius: 8)]))),
+                              const SizedBox(height: 12),
+                            ],
                             controlBar,
-                            const SizedBox(width: 16),
+                            const SizedBox(height: 12),
                             _buildTipBar(),
                           ],
                         ),

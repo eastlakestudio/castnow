@@ -26,11 +26,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   // Status Monitoring
   String _peerStatus = "Initializing";
   String _iceState = "N/A";
-  bool _showDebug = true;
+  bool _showDebug = false; // Hide debug UI by default
   
-  // Intercom State
+  // Intercom & Playback State
   MediaStream? _localMicStream;
-  bool _isMicMuted = false;
+  bool _isMicMuted = true;
+  bool _isPlaybackMuted = false;
   
   // Subscription Tracking
   final List<StreamSubscription> _peerSubscriptions = [];
@@ -56,19 +57,43 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     });
   }
 
+  void _togglePlaybackVolume() {
+    setState(() {
+      _isPlaybackMuted = !_isPlaybackMuted;
+      
+      // On iOS/Android natively, RTCVideoRenderer.muted does not stop the WebRTC C++ Audio Mixer. 
+      // Furthermore, it throws an exception on remote tracks.
+      // We must explicitly disable the incoming remote audio tracks.
+      if (_remoteRenderer.srcObject != null) {
+        for (var t in _remoteRenderer.srcObject!.getAudioTracks()) {
+          t.enabled = !_isPlaybackMuted;
+          Helper.setVolume(_isPlaybackMuted ? 0.0 : 1.0, t);
+        }
+      }
+      if (_pipRenderer.srcObject != null) {
+        for (var t in _pipRenderer.srcObject!.getAudioTracks()) {
+          t.enabled = !_isPlaybackMuted;
+          Helper.setVolume(_isPlaybackMuted ? 0.0 : 1.0, t);
+        }
+      }
+    });
+  }
+
   @override
   void dispose() {
     _remoteRenderer.dispose();
     _pipRenderer.dispose();
     _localMicStream?.dispose();
     _clearPeerSubscriptions();
-    _peer?.dispose();
+    final p = _peer;
     _peer = null;
+    Future.delayed(const Duration(milliseconds: 500), () => p?.dispose());
     super.dispose();
   }
 
   void _toggleMic() {
     if (_localMicStream == null) return;
+    HapticFeedback.mediumImpact();
     setState(() {
       _isMicMuted = !_isMicMuted;
       for (var track in _localMicStream!.getAudioTracks()) {
@@ -86,9 +111,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       port: 443,
       path: '/',
       secure: true,
-      debug: LogLevel.All,
+      debug: LogLevel.Errors,
       config: {
-        'sdpSemantics': 'unified-plan',
         'iceServers': [
           {'urls': 'stun:stun.l.google.com:19302'},
           {'urls': 'stun:stun.miwifi.com:3478'},
@@ -113,17 +137,11 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
          // Request minimal video/audio to get the slots in SDP
          micStream = await navigator.mediaDevices.getUserMedia({
            'audio': {'echoCancellation': true, 'noiseSuppression': true, 'autoGainControl': true},
-           'video': {
-             'facingMode': 'user',
-             'width': 640,
-             'height': 480,
-             'frameRate': 8, // Very low rate for placeholder
-           }
+           'video': false
          });
          _localMicStream = micStream;
          
          // CRITICAL: Disable tracks immediately so we don't send local media
-         for (var t in _localMicStream!.getVideoTracks()) { t.enabled = false; }
          for (var t in _localMicStream!.getAudioTracks()) { t.enabled = false; }
        } catch (e) {
          debugPrint("⚠️ [PEER] Failed to capture placeholder media: $e");
@@ -142,7 +160,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
          debugPrint("📡 [PEER] Attempting to call: $targetId with placeholder stream");
          
          _connTimeout?.cancel();
-         _connTimeout = Timer(const Duration(seconds: 12), () {
+         _connTimeout = Timer(const Duration(seconds: 20), () {
            if (mounted && _isConnecting && !_isConnected) {
              debugPrint("⏳ [PEER] Connection timeout reaching target: $targetId");
              setState(() {
@@ -150,8 +168,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                _peerStatus = "Timeout - Check Code";
              });
              _clearPeerSubscriptions();
-             _peer?.dispose();
+             final p = _peer;
              _peer = null;
+             Future.delayed(const Duration(milliseconds: 500), () => p?.dispose());
            }
          });
 
@@ -159,15 +178,19 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
          await Future.delayed(const Duration(milliseconds: 700));
          if (!mounted || _peer == null) return;
 
-         final call = _peer!.call(targetId, micStream);
-         _setupCallHandlers(call);
+         final conn = _peer!.connect(targetId);
+         
+         _peerSubscriptions.add(conn.on("open").listen((_) {
+            debugPrint("🤝 [PEER] DataChannel connected. Waiting for broadcaster to call us...");
+         }));
+         
+         _peerSubscriptions.add(_peer!.on("call").listen((call) {
+            debugPrint("📞 [PEER] Incoming call from Broadcaster! Answering with intercom mic...");
+            _connTimeout?.cancel(); // Cancel timeout since we got the call
+            call.answer(micStream);
+            _setupCallHandlers(call);
+         }));
        }
-    }));
-
-    // Defensive: Shut down any accidental DataConnection (DC) handshake
-    _peerSubscriptions.add(_peer!.on("connection").listen((conn) {
-      debugPrint("⚠️ [PEER] Detected accidental DC from ${conn.peer}. Shutting it down...");
-      conn.close();
     }));
 
     _peerSubscriptions.add(_peer!.on("disconnected").listen((_) {
@@ -193,6 +216,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
     try {
       final pc = call.peerConnection;
+      if (pc?.iceConnectionState != null) {
+        _iceState = pc!.iceConnectionState!.toString().split('.').last;
+      }
       pc?.onIceConnectionState = (state) {
         debugPrint("❄️ [ICE] Connection: $state");
         if (mounted) setState(() => _iceState = state.toString().split('.').last);
@@ -210,7 +236,15 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     _peerSubscriptions.add(call.on("stream").listen((s) async {
       if (!mounted) return;
       _connTimeout?.cancel();
-      debugPrint("🎥 [PEER] Stream received! Video: ${s.getVideoTracks().length}, Audio: ${s.getAudioTracks().length}");
+      debugPrint("🎥 [PEER] Stream received! Total Video: ${s.getVideoTracks().length}, Audio: ${s.getAudioTracks().length}");
+      for (var t in s.getVideoTracks()) { debugPrint("   -> 🎬 Video Track: ${t.id} (enabled: ${t.enabled})"); }
+      for (var t in s.getAudioTracks()) { debugPrint("   -> 🎤 Audio Track: ${t.id} (enabled: ${t.enabled})"); }
+      
+      // Route audio to speakerphone natively (fixes iOS earpiece issue)
+      if (s.getAudioTracks().isNotEmpty) {
+        Helper.setSpeakerphoneOn(true);
+      }
+
       if (mounted) {
         setState(() {
           _peerStatus = "Streaming";
@@ -223,9 +257,17 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           MediaStream pipStream = await createLocalMediaStream('remote_pip');
           pipStream.addTrack(s.getVideoTracks()[1]);
           _pipRenderer.srcObject = pipStream;
-          _hasPip = true;
+          if (mounted) {
+            setState(() {
+              _hasPip = true;
+            });
+          }
         } else {
-          _hasPip = false;
+          if (mounted) {
+            setState(() {
+              _hasPip = false;
+            });
+          }
         }
       }
     }));
@@ -275,16 +317,39 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       bottom: 40,
                       child: GestureDetector(
                         onTap: _toggleSwap,
-                        child: Container(
-                          width: 110,
-                          height: 160,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.white24, width: 2),
-                            boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 15, spreadRadius: 2)],
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: RTCVideoView(secondaryRenderer),
+                        onPanUpdate: (details) {
+                          // TODO: Implement smooth drag if needed, 
+                          // but for now, swap on tap is the primary goal
+                        },
+                        child: ValueListenableBuilder<RTCVideoValue>(
+                          valueListenable: secondaryRenderer,
+                          builder: (context, value, child) {
+                            final aspect = value.width > 0 && value.height > 0 
+                                ? value.width / value.height 
+                                : 9 / 16;
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              width: 120,
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.white24, width: 1.5),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.5),
+                                    blurRadius: 20,
+                                    spreadRadius: 5,
+                                    offset: const Offset(0, 10),
+                                  )
+                                ],
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: AspectRatio(
+                                aspectRatio: aspect,
+                                child: RTCVideoView(secondaryRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover),
+                              ),
+                            );
+                          }
                         ),
                       ),
                     ),
@@ -293,13 +358,33 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             else
               Builder(builder: (context) {
                 final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-                return Flex(
-                  direction: isLandscape ? Axis.horizontal : Axis.vertical,
-                  children: [
-                    Expanded(child: RTCVideoView(mainRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain)),
-                    Container(width: isLandscape ? 1 : 0, height: isLandscape ? 0 : 1, color: Colors.white10),
-                    Expanded(child: RTCVideoView(secondaryRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain)),
-                  ],
+                return Container(
+                  color: Colors.black,
+                  child: Flex(
+                    direction: isLandscape ? Axis.horizontal : Axis.vertical,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          margin: const EdgeInsets.all(4),
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: RTCVideoView(mainRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain),
+                        ),
+                      ),
+                      Expanded(
+                        child: Container(
+                          margin: const EdgeInsets.all(4),
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: RTCVideoView(secondaryRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain),
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               }),
 
@@ -329,12 +414,20 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       style: IconButton.styleFrom(backgroundColor: Colors.black26),
                     ),
                     const SizedBox(width: 8),
-                    IconButton(
-                      icon: Icon(_isMicMuted ? Icons.mic_off_rounded : Icons.mic_rounded, color: _isMicMuted ? Colors.redAccent : Colors.white),
-                      onPressed: _toggleMic,
-                      style: IconButton.styleFrom(backgroundColor: _isMicMuted ? Colors.red.withOpacity(0.2) : Colors.black26),
-                    ),
                   ],
+                  // Mic button is always visible unconditionally
+                  IconButton(
+                    icon: Icon(_isMicMuted ? Icons.mic_off_rounded : Icons.mic_rounded, color: _isMicMuted ? Colors.redAccent : Colors.white),
+                    onPressed: _toggleMic,
+                    style: IconButton.styleFrom(backgroundColor: _isMicMuted ? Colors.red.withOpacity(0.2) : Colors.black26),
+                  ),
+                  const SizedBox(width: 8),
+                  // Playback Volume Mute toggle
+                  IconButton(
+                    icon: Icon(_isPlaybackMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded, color: _isPlaybackMuted ? Colors.amber : Colors.white),
+                    onPressed: _togglePlaybackVolume,
+                    style: IconButton.styleFrom(backgroundColor: _isPlaybackMuted ? Colors.amber.withOpacity(0.2) : Colors.black26),
+                  ),
                 ],
               ),
             ),
@@ -390,101 +483,129 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              "ACCESS CODE",
-              style: TextStyle(
-                color: kTextSecondary,
-                letterSpacing: 4,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-              ),
+      body: SafeArea(
+        child: Builder(builder: (context) {
+          final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
+          final pinBoxes = GestureDetector(
+            onTap: () {
+              // Focus hidden textfield
+            },
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                 // Hidden TextField to capture input
+                Opacity(
+                  opacity: 0,
+                  child: TextField(
+                    controller: _codeController,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    maxLength: 6,
+                    onChanged: (val) => setState(() {}),
+                  ),
+                ),
+                // Visual PIN Boxes
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(6, (index) {
+                    final char = _codeController.text.length > index ? _codeController.text[index] : "";
+                    final bool isFocused = _codeController.text.length == index;
+                    
+                    return Container(
+                      width: 48,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: kSurfaceColor,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isFocused ? kPrimaryColor : Colors.white10,
+                          width: 2,
+                        ),
+                        boxShadow: isFocused ? [
+                          BoxShadow(color: kPrimaryColor.withOpacity(0.2), blurRadius: 10)
+                        ] : [],
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        char,
+                        style: const TextStyle(
+                          color: kPrimaryColor,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ],
             ),
-            const SizedBox(height: 32),
-            // PIN Input
-            GestureDetector(
-              onTap: () {
-                // Focus hidden textfield
-              },
-              child: Stack(
-                alignment: Alignment.center,
+          );
+
+          final connectButton = SizedBox(
+            width: isLandscape ? 200 : double.infinity,
+            height: 60,
+            child: ElevatedButton(
+              onPressed: _join,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimaryColor,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                elevation: 8,
+              ),
+              child: _isConnecting 
+                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) 
+                : const Text("CONNECT", style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
+            ),
+          );
+
+          return Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                   // Hidden TextField to capture input
-                  Opacity(
-                    opacity: 0,
-                    child: TextField(
-                      controller: _codeController,
-                      autofocus: true,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      maxLength: 6,
-                      onChanged: (val) => setState(() {}),
+                  const Text(
+                    "ACCESS CODE",
+                    style: TextStyle(
+                      color: kTextSecondary,
+                      letterSpacing: 4,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-                  // Visual PIN Boxes
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: List.generate(6, (index) {
-                      final char = _codeController.text.length > index ? _codeController.text[index] : "";
-                      final bool isFocused = _codeController.text.length == index;
-                      
-                      return Container(
-                        width: 48,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: kSurfaceColor,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: isFocused ? kPrimaryColor : Colors.white10,
-                            width: 2,
-                          ),
-                          boxShadow: isFocused ? [
-                            BoxShadow(color: kPrimaryColor.withOpacity(0.2), blurRadius: 10)
-                          ] : [],
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          char,
-                          style: const TextStyle(
-                            color: kPrimaryColor,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      );
-                    }),
+                  const SizedBox(height: 32),
+                  
+                  if (isLandscape)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Expanded(child: pinBoxes),
+                        const SizedBox(width: 48),
+                        connectButton,
+                      ],
+                    )
+                  else
+                    Column(
+                      children: [
+                        pinBoxes,
+                        const SizedBox(height: 48),
+                        connectButton,
+                      ],
+                    ),
+                    
+                  const SizedBox(height: 24),
+                  Text(
+                    "Ask the broadcaster for the 6-digit key",
+                    style: TextStyle(color: kTextSecondary.withOpacity(0.5), fontSize: 13),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 48),
-            SizedBox(
-              width: double.infinity,
-              height: 60,
-              child: ElevatedButton(
-                onPressed: _join,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimaryColor,
-                  foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  elevation: 8,
-                ),
-                child: _isConnecting 
-                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) 
-                  : const Text("CONNECT", style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              "Ask the broadcaster for the 6-digit key",
-              style: TextStyle(color: kTextSecondary.withOpacity(0.5), fontSize: 13),
-            ),
-          ],
-        ),
+          );
+        }),
       ),
     );
   }

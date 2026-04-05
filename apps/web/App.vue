@@ -53,7 +53,7 @@ const peerInstance = ref(null);
 const localStream = ref(null);
 const localVideo = ref(null);
 const activeConnections = ref([]);
-const isMicMuted = ref(false);
+const isMicMuted = ref(true); // Default to muted per user request
 
 // Receiver Refs
 const joinCode = ref("");
@@ -89,6 +89,7 @@ const receiverMicStream = ref(null);
 const receiverAudioStream = ref(null); // Sender side: audio stream from receiver
 const receiverAudioElement = ref(null);
 const activeReceiverCall = ref(null); // Track the active call for the receiver
+const activeTalkbackCall = ref(null); // Track the outgoing intercom call
 
 const videoDevices = ref([]);
 const hasMultipleCameras = computed(() => videoDevices.value.length > 1);
@@ -310,6 +311,7 @@ const handleStartCasting = async () => {
           } 
         });
         as.getAudioTracks().forEach(t => {
+          t.enabled = !isMicMuted.value;
           combinedStream.addTrack(t);
           console.log("🎙️ [WEBRTC] Added microphone track:", t.label);
         });
@@ -344,6 +346,19 @@ const handleStartCasting = async () => {
       });
       conn.on("close", () => {
         activeConnections.value = activeConnections.value.filter(c => c.peer !== conn.peer);
+      });
+    });
+
+    // Handle incoming talkback calls from Receivers (and direct MediaConnections)
+    peer.on("call", (call) => {
+      console.log("📞 [PEER] Broadcaster received incoming intercom/direct call!");
+      call.answer(localStream.value); // Answer with our broadcast media!
+      call.on("stream", (rs) => {
+        console.log("🎙️ [WEBRTC] Broadcaster received talkback stream");
+        receiverAudioStream.value = rs;
+      });
+      call.on("close", () => {
+        receiverAudioStream.value = null;
       });
     });
 
@@ -390,38 +405,20 @@ const setupCallHandlers = (call) => {
 const toggleReceiverMic = async () => {
   if (isDragging.value) return;
 
-  if (isReceiverMicActive.value) {
-    if (receiverMicStream.value) {
-      receiverMicStream.value.getTracks().forEach(t => t.stop());
-      receiverMicStream.value = null;
-    }
-    isReceiverMicActive.value = false;
-    showToast(t('receiver.mic_off'), "info");
-  } else {
-    // iPad/iOS Safari HTTPS Check
-    if (!window.isSecureContext && /iPad|iPhone|iPod/.test(navigator.userAgent)) {
-      showToast(t('errors.secure_context_required'), "error", 8000);
-      return;
-    }
+  if (!receiverMicStream.value) {
+    showToast(t('errors.mic_access_failed'), "error");
+    return;
+  }
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      receiverMicStream.value = stream;
-      isReceiverMicActive.value = true;
-      showToast(t('receiver.mic_on'), "success");
-      
-      // If already in a call, attempt to add the track to the existing connection
-      if (activeReceiverCall.value && activeReceiverCall.value.peerConnection) {
-        const pc = activeReceiverCall.value.peerConnection;
-        stream.getAudioTracks().forEach(track => {
-          pc.addTrack(track, stream);
-        });
-        // Note: Renegotiation might be required for some browsers, 
-        // but PeerJS/WebRTC often handles simple track addition.
-      }
-    } catch (err) {
-      showToast(t('errors.mic_access_failed'), "error");
-    }
+  isReceiverMicActive.value = !isReceiverMicActive.value;
+  receiverMicStream.value.getAudioTracks().forEach(t => {
+    t.enabled = isReceiverMicActive.value;
+  });
+  
+  if (isReceiverMicActive.value) {
+    showToast(t('receiver.mic_on'), "success");
+  } else {
+    showToast(t('receiver.mic_off'), "info");
   }
 };
 
@@ -506,11 +503,21 @@ onUnmounted(() => {
   window.removeEventListener("keydown", handleKeyDown);
 });
 
-const handleJoin = () => {
+const handleJoin = async () => {
   if (joinCode.value.length !== 6) return;
 
   isConnecting.value = true;
   error.value = null;
+
+  // Pre-allocate the microphone stream up front to establish a solid bi-directional SDP blueprint.
+  try {
+    const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioStream.getAudioTracks().forEach(t => t.enabled = false);
+    receiverMicStream.value = audioStream;
+    isReceiverMicActive.value = false;
+  } catch (err) {
+    console.warn("Could not pre-allocate receiver microphone", err);
+  }
 
   // Viewer needs their own Peer ID to receive the call
   const peer = new window.Peer({
