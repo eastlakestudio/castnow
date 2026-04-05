@@ -105,8 +105,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
        try {
          await Permission.microphone.request();
          final micStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
-         _localMicStream = micStream;
-         for (var t in _localMicStream!.getAudioTracks()) { t.enabled = false; }
+         if (mounted) {
+           setState(() {
+             _localMicStream = micStream;
+             _isMicMuted = true;
+             for (var t in _localMicStream!.getAudioTracks()) { t.enabled = false; }
+           });
+         }
        } catch (_) {
          _localMicStream = await createLocalMediaStream('dm_mic');
        }
