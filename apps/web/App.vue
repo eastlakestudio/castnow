@@ -135,13 +135,24 @@ watch([localCameraVideo, localCameraStream], ([el, stream]) => {
   if (el && stream) el.srcObject = stream;
 });
 
-const setupRemoteVideo = (el, stream) => {
+const setupRemoteVideo = async (el, stream) => {
   if (!el || !stream) return;
+  if (el.srcObject === stream) return;
+  
+  console.log("📥 [RECEIVE-FIX] Binding stream to video element:", stream.id);
   el.srcObject = stream;
   el.muted = isMuted.value;
   el.setAttribute("playsinline", "true");
   el.setAttribute("webkit-playsinline", "true");
-  el.play().catch(e => console.log("Autoplay blocked", e));
+  
+  try {
+    await el.play();
+    console.log("📥 [RECEIVE-FIX] Play successful");
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      console.warn("📥 [RECEIVE-FIX] Play failed (possibly blocked by browser policy):", err);
+    }
+  }
 };
 
 watch([screenVideo, screenStream], ([el, stream]) => setupRemoteVideo(el, stream));
@@ -377,6 +388,22 @@ const handleStartCasting = async () => {
       });
     });
 
+    // 4. Handle incoming Viewer data connections to initiate active Mirror Call (Web-to-Web)
+    peer.on("connection", (conn) => {
+      console.log("🤝 [PEER] Broadcaster received new Viewer data connection:", conn.peer);
+      // Wait for data connection to open before calling to ensure Viewer's peer is ready
+      conn.on("open", () => {
+        console.log("🚀 [WEBRTC] Active PUSH Video to Viewer:", conn.peer);
+        const forwardCall = peer.call(conn.peer, localStream.value);
+        setupCallHandlers(forwardCall);
+        activeConnections.value.push(conn);
+      });
+      
+      conn.on("data", (data) => {
+        console.log("📥 [DATA] Broadcaster received from Viewer:", data);
+      });
+    });
+
     peer.on("error", handlePeerError);
   } catch (err) {
     console.error(err);
@@ -587,44 +614,44 @@ const handleJoin = async () => {
       call.answer(receiverMicStream.value || undefined); 
       
       call.on("stream", (rs) => {
-        console.log("📥 [WEBRTC] Received remote stream:", rs.id);
+        console.log("📥 [RECEIVE-FIX] Incoming remote stream:", rs.id, "| Tracks:", rs.getTracks().length);
         
-        // Potential fix for black screen: ensure tracks are enabled and wait for unmute
+        const updateSplitStreams = () => {
+          const videoTracks = rs.getVideoTracks();
+          const audioTracks = rs.getAudioTracks();
+          
+          console.log(`📥 [RECEIVE-FIX] Refreshing tracks - Video: ${videoTracks.length}, Audio: ${audioTracks.length}`);
+          
+          if (videoTracks.length > 0) {
+            // Track 0 is Screen
+            // IMPORTANT: Create new MediaStream to ensure Vue reactivity & re-binding
+            screenStream.value = new MediaStream([videoTracks[0], ...audioTracks]);
+            console.log("📺 [RECEIVE-FIX] Screen Stream Ready:", videoTracks[0].label);
+          }
+          
+          if (videoTracks.length > 1) {
+            // Track 1 is Camera
+            cameraStream.value = new MediaStream([videoTracks[1]]);
+            console.log("📷 [RECEIVE-FIX] Camera Stream Ready:", videoTracks[1].label);
+          } else {
+            cameraStream.value = null;
+          }
+           // Fallback for single stream: CLOBBER remoteStream to bypass Vue object identity check
+          remoteStream.value = new MediaStream(rs.getTracks());
+        };
+
+        // Initial assignment
+        updateSplitStreams();
+
+        // Critical: Handle late unmuting (common on iOS)
         rs.getTracks().forEach(t => {
           t.enabled = true;
           t.onunmute = () => {
-            console.log(`✅ Track ${t.kind} unmuted`);
-            // Force re-assignment to trigger watchers if needed
-            remoteStream.value = new MediaStream(rs.getTracks());
+            console.log(`✅ [RECEIVE-FIX] Track ${t.kind} unmuted, re-triggering stream update`);
+            updateSplitStreams();
           };
-          if (t.readyState === 'ended') console.warn(`⚠️ track ${t.kind} is ended`);
+          if (t.readyState === 'ended') console.warn(`⚠️ [RECEIVE-FIX] track ${t.kind} arrived in 'ended' state`);
         });
-
-        remoteStream.value = rs;
-
-        // Extract tracks for splitting
-        const videoTracks = rs.getVideoTracks();
-        const audioTracks = rs.getAudioTracks();
-
-        console.log(`📥 [WEBRTC] Tracks - Video: ${videoTracks.length}, Audio: ${audioTracks.length}`);
-
-        if (videoTracks.length > 0) {
-          // Track 0 is Screen
-          screenStream.value = new MediaStream([videoTracks[0], ...audioTracks]);
-          console.log("📺 [WEBRTC] Assigned Screen Stream:", videoTracks[0].label);
-          // Wait for track to be active
-          videoTracks[0].onunmute = () => {
-             console.log("📺 [WEBRTC] Screen track unmuted");
-          };
-        }
-        
-        if (videoTracks.length > 1) {
-          // Track 1 is Camera
-          cameraStream.value = new MediaStream([videoTracks[1]]);
-          console.log("📷 [WEBRTC] Assigned Camera Stream:", videoTracks[1].label);
-        } else {
-          cameraStream.value = null;
-        }
       });
     });
 
