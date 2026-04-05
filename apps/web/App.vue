@@ -345,37 +345,34 @@ const handleStartCasting = async () => {
       peerId.value = id;
       isConnecting.value = false;
     });
-    // 2. Active Push: When a receiver connects via DataConnection, we PUSH the video stream
-    peer.on("connection", (conn) => {
-      activeConnections.value.push(conn);
-      conn.on("open", () => {
-        const stream = localStream.value;
-        if (stream) {
-          console.log(`🚀 [WEBRTC] INITIATING FORWARD VIDEO CALL TO ${conn.peer} | Tracks: V=${stream.getVideoTracks().length}, A=${stream.getAudioTracks().length}`);
-          if (stream.getVideoTracks().length < 2 && selectedSources.value.includes('screen') && selectedSources.value.includes('camera')) {
-            console.warn("⚠️ [WEBRTC] Potential multi-track issue: Expecting 2 videos but stream only has 1!");
-          }
-          const call = peer.call(conn.peer, stream);
-          setupCallHandlers(call);
-        }
-      });
-      conn.on("close", () => {
-        activeConnections.value = activeConnections.value.filter(c => c.peer !== conn.peer);
-      });
-    });
+    // Track peers we've already sent a forward video call to
+    const sentCalls = new Set();
 
-    // 3. Passive Listen: Handle incoming talkback calls from Receivers (Intercom)
+    // 3. Mirror Call Architecture (v4): Handle incoming talkback and push video
     peer.on("call", (call) => {
-      console.log("📞 [PEER] Broadcaster received incoming intercom/direct call from:", call.peer);
+      const iosId = call.peer;
+      console.log("📞 [PEER] Broadcaster received incoming intercom/direct call from:", iosId);
       
-      // ANSWER with local stream to provide audio return, but the primary video is sent via forward call
+      // ANSWER the reverse link for intercom
       call.answer(localStream.value); 
+      
+      // MIRROR CALL: Active Push for V=2 Video dominant stream
+      // Using a Set guard ensures we only initiate ONE high-priority forward call per session
+      if (localStream.value && localStream.value.getVideoTracks().length >= 2) {
+        if (!sentCalls.has(iosId)) {
+          sentCalls.add(iosId);
+          console.log("🚀 [WEBRTC] TRIGGERING SINGLE MIRROR VIDEO CALL TO", iosId, "| V=2 confirmed");
+          const forwardCall = peer.call(iosId, localStream.value);
+          setupCallHandlers(forwardCall);
+        }
+      }
       
       call.on("stream", (rs) => {
         console.log("🎙️ [WEBRTC] Broadcaster received talkback stream | Audio Tracks:", rs.getAudioTracks().length);
         receiverAudioStream.value = rs;
       });
       call.on("close", () => {
+        sentCalls.delete(iosId);
         receiverAudioStream.value = null;
       });
     });

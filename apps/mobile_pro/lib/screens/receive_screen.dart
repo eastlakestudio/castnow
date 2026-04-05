@@ -117,10 +117,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             if (mounted && _isConnecting && !_isConnected) setState(() => _isConnecting = false);
           });
           
-          // 1. Establish DataConnection to trigger Broadcaster's forward video call
-          _peer!.connect(code); 
-          
-          // 2. Establish intercom call (audio only)
+          // 1. Establish intercom call (audio only) - Web will use this to call us back with video
           final call = _peer!.call(code, _localMicStream!);
           _setupCallHandlers(call);
        }
@@ -151,9 +148,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       
       pc?.onTrack = (event) {
         if (!mounted) return;
-        debugPrint("📡 [TRACK] Incoming ${event.track?.kind} track: ${event.track?.id}");
-        if (event.track?.kind == 'video') {
-          // Use the stream associated with this track directly to ensure we have the latest
+        debugPrint("📡 [TRACK] Incoming ${event.track.kind} track: ${event.track.id}");
+        if (event.track.kind == 'video') {
           final stream = (event.streams.isNotEmpty) ? event.streams.first : _totalRemoteStream;
           if (stream != null) {
             Future.delayed(const Duration(milliseconds: 300), () {
@@ -173,6 +169,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       if (!mounted) return;
       _connTimeout?.cancel();
       debugPrint("🎥 [STREAM] Initial Snapshot - Audio=${s.getAudioTracks().length}, Video=${s.getVideoTracks().length}");
+      
+      // v4 Priority Check: Don't let a 1-track snapshot override a stable 2-track stream
+      if (_totalRemoteStream != null && _totalRemoteStream!.getVideoTracks().length > s.getVideoTracks().length) {
+        debugPrint("⚠️ [RENDER] Ignoring lower-priority snapshot (New: ${s.getVideoTracks().length} vs Old: ${_totalRemoteStream!.getVideoTracks().length})");
+        return;
+      }
+      
       _totalRemoteStream = s;
       if (s.getAudioTracks().isNotEmpty) {
         Future.delayed(const Duration(milliseconds: 500), () => Helper.setSpeakerphoneOn(true));
@@ -196,10 +199,16 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     final vt = s.getVideoTracks();
     if (vt.isEmpty) return;
 
+    // v4 Priority Check: Don't let a 1-track stream override a stable 2-track stream
+    if (_totalRemoteStream != null && _totalRemoteStream!.getVideoTracks().length > vt.length) {
+      debugPrint("⚠️ [RENDER] Ignoring lower-priority stream (New: ${vt.length} vs Old: ${_totalRemoteStream!.getVideoTracks().length})");
+      return;
+    }
+
     setState(() { 
       _isConnected = true; 
       _isConnecting = false; 
-      _totalRemoteStream = s; // Ensure global stream is current
+      _totalRemoteStream = s; 
     });
 
     // Main Renderer
