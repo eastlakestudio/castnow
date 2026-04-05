@@ -252,6 +252,13 @@ const handleStartCasting = async () => {
     isConnecting.value = true;
     error.value = null;
 
+    // iPad/iOS Safari HTTPS Check
+    if (!window.isSecureContext && /iPad|iPhone|iPod/.test(navigator.userAgent)) {
+      showToast(t('errors.secure_context_required'), "error", 8000);
+      isConnecting.value = false;
+      return;
+    }
+
     let combinedStream = new MediaStream();
 
     // 1. Screen Share (Ordered first to ensure Screen is Video Track 0)
@@ -391,6 +398,12 @@ const toggleReceiverMic = async () => {
     isReceiverMicActive.value = false;
     showToast(t('receiver.mic_off'), "info");
   } else {
+    // iPad/iOS Safari HTTPS Check
+    if (!window.isSecureContext && /iPad|iPhone|iPod/.test(navigator.userAgent)) {
+      showToast(t('errors.secure_context_required'), "error", 8000);
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       receiverMicStream.value = stream;

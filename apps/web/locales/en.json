@@ -66,7 +66,8 @@
         "camera_switch_failed": "Camera switch failed",
         "select_at_least_one": "Select at least one source",
         "mic_access_failed": "Microphone access denied",
-        "mic_access_failed_ios": "Microphone access denied. Please check Safari Settings > Microphone and ensure it's not set to Deny."
+        "mic_access_failed_ios": "Microphone access denied. Please check Safari Settings > Microphone and ensure it's not set to Deny.",
+        "secure_context_required": "HTTPS is required for camera/mic on iPad/Mobile Safari. Please use a secure connection."
     },
     "ended": {
         "title": "Broadcast Ended",
