@@ -36,5 +36,39 @@ void main() {
       isSwapped = !isSwapped;
       expect(isSwapped, false);
     });
+
+    test('Exclusive source selection logic', () {
+      bool shareScreen = true;
+      bool shareCamera = false;
+
+      // Check Camera Click
+      void clickCamera(bool val) {
+        if (val) {
+          shareCamera = true;
+          shareScreen = false;
+        } else {
+          shareCamera = false;
+        }
+      }
+
+      void clickScreen(bool val) {
+        if (val) {
+          shareScreen = true;
+          shareCamera = false;
+        } else {
+          shareScreen = false;
+        }
+      }
+
+      // Action: Click Camera
+      clickCamera(true);
+      expect(shareScreen, false);
+      expect(shareCamera, true);
+
+      // Action: Click Screen
+      clickScreen(true);
+      expect(shareScreen, true);
+      expect(shareCamera, false);
+    });
   });
 }

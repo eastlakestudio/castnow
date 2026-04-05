@@ -8,15 +8,16 @@ import ReplayKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    initAudioSession()
+    GeneratedPluginRegistrant.register(with: self)
     
-    // 在主引擎初始化时注册自定义逻辑
+    // Custom registrations after GeneratedPluginRegistrant
     if let registrar = self.registrar(forPlugin: "CastNowPickerPlugin") {
         let factory = BroadcastPickerFactory()
         registrar.register(factory, withId: "castnow_picker_view")
         
         let triggerChannel = FlutterMethodChannel(name: "castnow_picker_control", binaryMessenger: registrar.messenger())
         BroadcastPickerManager.shared.channel = triggerChannel
+        
         triggerChannel.setMethodCallHandler { (call, result) in
             if call.method == "triggerPicker" {
                 BroadcastPickerManager.shared.trigger()
@@ -30,23 +31,10 @@ import ReplayKit
         }
     }
     
-    GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
-  private func initAudioSession() {
-    do {
-      let session = AVAudioSession.sharedInstance()
-      try session.setCategory(.playAndRecord, mode: .videoChat, options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers])
-      try session.setActive(true)
-      print("✅ [CASTNOW] AVAudioSession initialized successfully.")
-    } catch {
-      print("❌ [CASTNOW] Failed to set AVAudioSession category: \(error)")
-    }
-  }
-
-
-  // --- Background Task Management for persistence during lock ---
+  // --- Background Task Management ---
   private var backgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
 
   override func applicationDidEnterBackground(_ application: UIApplication) {
@@ -65,10 +53,6 @@ import ReplayKit
         backgroundTaskIdentifier = .invalid
     }
   }
-
-  override func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
-    return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
-  }
 }
 
 // Global manager to hold and trigger the picker
@@ -78,19 +62,18 @@ class BroadcastPickerManager {
     var channel: FlutterMethodChannel?
     
     func log(_ message: String) {
-        // Use print for debugger console, avoid NSLog to bypass hook conflicts
         print("[BroadcastPickerManager] \(message)")
         DispatchQueue.main.async {
             self.channel?.invokeMethod("nativeLog", arguments: message)
         }
     }
+    
     func trigger() {
         guard let picker = currentPicker else {
             log("❌ Trigger failed: picker is nil")
             return
         }
         
-        // Find the UIButton inside the picker hierarchy
         func findButton(in view: UIView) -> UIButton? {
             if let button = view as? UIButton { return button }
             for subview in view.subviews {
@@ -101,7 +84,6 @@ class BroadcastPickerManager {
 
         if let button = findButton(in: picker) {
             log("📢 Clicking native broadcast button...")
-            // Avoid complicated string interpolation of the button itself
             button.sendActions(for: .touchUpInside)
             log("✅ Trigger sent")
         } else {
@@ -139,7 +121,6 @@ class BroadcastPickerManager {
 }
 
 // --- PlatformView Implementation ---
-
 class BroadcastPickerFactory: NSObject, FlutterPlatformViewFactory {
     func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
         return BroadcastPickerView(frame: frame)
@@ -156,7 +137,6 @@ class BroadcastPickerView: NSObject, FlutterPlatformView {
         pickerView.backgroundColor = .clear
         
         BroadcastPickerManager.shared.currentPicker = pickerView
-        
         _container = PickerWrapperView(picker: pickerView)
         super.init()
     }
@@ -182,7 +162,6 @@ class PickerWrapperView: UIView {
             picker.trailingAnchor.constraint(equalTo: trailingAnchor)
         ])
         
-        // Clean UI for real device testing
         self.backgroundColor = .clear
         self.isUserInteractionEnabled = true
     }

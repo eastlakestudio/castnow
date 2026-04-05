@@ -17,7 +17,6 @@
 		985E120FE633D44DB059C7F4 /* Pods_BroadcastExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B70F1BAB0C020CDABF1AAAD7 /* Pods_BroadcastExtension.framework */; };
 		B0B56B0F2F227B7500B6B823 /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B0B56B0E2F227B7500B6B823 /* ReplayKit.framework */; };
 		B0B56B162F227B7500B6B823 /* BroadcastExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B0B56B0D2F227B7500B6B823 /* BroadcastExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		C0238A6BD02A85173842F1FB /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5891580C7EC97D57D2F4FD6 /* SceneDelegate.swift */; };
 		E3B069C250DA82C25DAA39C0 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1166EC271A8BECECFE09406D /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
 
@@ -79,7 +78,6 @@
 		CB9B0612E0C3073A99A175A0 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		D08B0B4DC9E2B255B5DD7C24 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		DA8669687603E12AB81376D9 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
-		F5891580C7EC97D57D2F4FD6 /* SceneDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -213,7 +211,6 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
-				F5891580C7EC97D57D2F4FD6 /* SceneDelegate.swift */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -461,7 +458,6 @@
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
-				C0238A6BD02A85173842F1FB /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

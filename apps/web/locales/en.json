@@ -65,7 +65,8 @@
         "service_error": "Service error. Please try again later.",
         "camera_switch_failed": "Camera switch failed",
         "select_at_least_one": "Select at least one source",
-        "mic_access_failed": "Microphone access denied"
+        "mic_access_failed": "Microphone access denied",
+        "mic_access_failed_ios": "Microphone access denied. Please check Safari Settings > Microphone and ensure it's not set to Deny."
     },
     "ended": {
         "title": "Broadcast Ended",

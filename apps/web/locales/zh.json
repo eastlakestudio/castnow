@@ -65,7 +65,8 @@
         "service_error": "服务错误。请稍后再试。",
         "camera_switch_failed": "摄像头切换失败",
         "select_at_least_one": "请至少选择一个源",
-        "mic_access_failed": "麦克风访问请求被拒绝"
+        "mic_access_failed": "麦克风访问请求被拒绝",
+        "mic_access_failed_ios": "麦克风访问被拒绝。请检查：设置 > Safari 浏览器 > 麦克风，并确保未设置为“拒绝”。"
     },
     "ended": {
         "title": "投屏已结束",

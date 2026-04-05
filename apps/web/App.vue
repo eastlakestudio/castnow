@@ -28,6 +28,7 @@ import {
   Mic,
   MicOff,
   LogOut,
+  CheckCircle2,
 } from "lucide-vue-next";
 
 const { t, locale } = useI18n();
@@ -87,6 +88,7 @@ const isReceiverMicActive = ref(false); // Receiver side intercom toggle
 const receiverMicStream = ref(null);
 const receiverAudioStream = ref(null); // Sender side: audio stream from receiver
 const receiverAudioElement = ref(null);
+const activeReceiverCall = ref(null); // Track the active call for the receiver
 
 const videoDevices = ref([]);
 const hasMultipleCameras = computed(() => videoDevices.value.length > 1);
@@ -108,7 +110,10 @@ let toastTimeout = null;
 
 // 监听收到的音频流（发送端听接收端的对讲）
 watch([receiverAudioElement, receiverAudioStream], ([el, stream]) => {
-  if (el && stream) el.srcObject = stream;
+  if (el && stream) {
+    el.srcObject = stream;
+    el.play().catch(e => console.error("Broadcaster audio playback failed", e));
+  }
 });
 
 // 监听视频元素的挂载，确保 stream 能正确绑定
@@ -249,7 +254,7 @@ const handleStartCasting = async () => {
 
     let combinedStream = new MediaStream();
 
-    // 1. Screen Share
+    // 1. Screen Share (Ordered first to ensure Screen is Video Track 0)
     if (selectedSources.value.includes('screen')) {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
         showToast(t('errors.screen_share_unsupported'), "error", 5000);
@@ -260,14 +265,18 @@ const handleStartCasting = async () => {
         video: { cursor: "always" },
         audio: true,
       });
-      // Add ALL tracks (video and audio) to combinedStream to ensure transmission and proper termination
-      ss.getTracks().forEach(t => combinedStream.addTrack(t));
-      localScreenStream.value = new MediaStream(ss.getTracks());
+      
+      // Add Video Track first
+      ss.getVideoTracks().forEach(t => combinedStream.addTrack(t));
+      // Add Audio Tracks
+      ss.getAudioTracks().forEach(t => combinedStream.addTrack(t));
+      
+      localScreenStream.value = new MediaStream(ss.getVideoTracks());
       // Stop broadcast if screen share is stopped via browser UI
       ss.getVideoTracks()[0].onended = () => resetApp();
     }
 
-    // 2. Camera Share
+    // 2. Camera Share (Ordered second to ensure Camera is Video Track 1)
     if (selectedSources.value.includes('camera')) {
       const cs = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -275,7 +284,7 @@ const handleStartCasting = async () => {
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
-        audio: selectedSources.value.includes('mic') && !selectedSources.value.includes('screen'), 
+        audio: false, // Mic is handled separately below for clarity
       });
       cs.getVideoTracks().forEach(t => {
         localCameraStream.value = new MediaStream([t]);
@@ -283,11 +292,24 @@ const handleStartCasting = async () => {
       });
     }
 
-    // 3. Audio (Only if 'mic' selected and not already added by Screen/Camera)
-    const hasAudio = combinedStream.getAudioTracks().length > 0;
-    if (selectedSources.value.includes('mic') && !hasAudio) {
-      const as = await navigator.mediaDevices.getUserMedia({ audio: true });
-      as.getTracks().forEach(t => combinedStream.addTrack(t));
+    // 3. Microphone (Always capture if selected, don't skip if screen audio exists)
+    if (selectedSources.value.includes('mic')) {
+      try {
+        const as = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          } 
+        });
+        as.getAudioTracks().forEach(t => {
+          combinedStream.addTrack(t);
+          console.log("🎙️ [WEBRTC] Added microphone track:", t.label);
+        });
+      } catch (e) {
+        console.error("Failed to capture microphone", e);
+        showToast(t('errors.mic_access_failed'), "error");
+      }
     }
 
     localStream.value = combinedStream;
@@ -296,7 +318,10 @@ const handleStartCasting = async () => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const peer = new window.Peer(code, {
       debug: 1,
-      config: { iceServers: getIceServers() },
+      config: { 
+        iceServers: getIceServers(),
+        sdpSemantics: 'unified-plan'
+      },
     });
 
     peerInstance.value = peer;
@@ -328,12 +353,23 @@ const handleStartCasting = async () => {
 };
 
 const setupCallHandlers = (call) => {
-  call.on("stream", (remoteStream) => {
-    // This is audio coming back from the receiver (Intercom)
-    if (remoteStream.getAudioTracks().length > 0) {
-      receiverAudioStream.value = remoteStream;
+  call.on("stream", (rs) => {
+    console.log("🎙️ [WEBRTC] Broadcaster received talkback stream");
+    if (rs.getAudioTracks().length > 0) {
+      receiverAudioStream.value = rs;
     }
   });
+
+  // Also listen to raw ontrack for dynamically added tracks
+  if (call.peerConnection) {
+    call.peerConnection.ontrack = (event) => {
+      console.log("🎙️ [WEBRTC] Broadcaster detected new track:", event.track.kind);
+      if (event.track.kind === 'audio') {
+        const stream = event.streams[0] || new MediaStream([event.track]);
+        receiverAudioStream.value = stream;
+      }
+    };
+  }
 
   call.on("error", (err) => {
     console.error("Call Error:", err);
@@ -361,9 +397,15 @@ const toggleReceiverMic = async () => {
       isReceiverMicActive.value = true;
       showToast(t('receiver.mic_on'), "success");
       
-      // If already in a call, we need to renegotiate. 
-      // Simplified for now: user should enable mic before/re-joining or we establish a new call
-      // In a real app we'd use replaceTrack here.
+      // If already in a call, attempt to add the track to the existing connection
+      if (activeReceiverCall.value && activeReceiverCall.value.peerConnection) {
+        const pc = activeReceiverCall.value.peerConnection;
+        stream.getAudioTracks().forEach(track => {
+          pc.addTrack(track, stream);
+        });
+        // Note: Renegotiation might be required for some browsers, 
+        // but PeerJS/WebRTC often handles simple track addition.
+      }
     } catch (err) {
       showToast(t('errors.mic_access_failed'), "error");
     }
@@ -459,16 +501,21 @@ const handleJoin = () => {
 
   // Viewer needs their own Peer ID to receive the call
   const peer = new window.Peer({
-    config: { iceServers: getIceServers() },
+    config: { 
+      iceServers: getIceServers(),
+      sdpSemantics: 'unified-plan'
+    },
   });
 
   peerInstance.value = peer;
 
-  peer.on("open", () => {
+  peer.on("open", (id) => {
+    console.log("🚀 [PEER] Viewer Peer Open, ID:", id);
     const conn = peer.connect(joinCode.value, { serialization: 'json' });
+    console.log("📡 [PEER] Attempting to connect to Broadcaster:", joinCode.value);
 
     conn.on("open", () => {
-      console.log("DataConnection OPEN");
+      console.log("🤝 [DATA] Connection to Broadcaster OPEN");
       const info = getDeviceInfo();
       setTimeout(() => conn.send(info), 500);
       appState.value = STATES.RECEIVER_ACTIVE;
@@ -476,6 +523,7 @@ const handleJoin = () => {
     });
 
     conn.on("data", (data) => {
+      console.log("📥 [DATA] Received from Broadcaster:", data);
       try {
         const payload = typeof data === "string" ? JSON.parse(data) : data;
         if (payload && payload.type === "dev") {
@@ -487,31 +535,63 @@ const handleJoin = () => {
     });
 
     conn.on("close", () => {
+      console.log("⛔ [DATA] Connection CLOSED");
       appState.value = STATES.BROADCAST_ENDED;
       resetApp();
     });
-  });
-
-  // 2. Wait for Broadcaster to call us with the stream
-  peer.on("call", (call) => {
-    // Answer with the local mic stream if active (Intercom)
-    call.answer(receiverMicStream.value || undefined); 
     
-    call.on("stream", (rs) => {
-      remoteStream.value = rs;
-
-      // Simplistic track split: users can swap manually via UI
-      const videoTracks = rs.getVideoTracks();
-      const audioTracks = rs.getAudioTracks();
-
-      if (videoTracks.length > 0) {
-        screenStream.value = new MediaStream([videoTracks[0], ...audioTracks]);
-      }
-      if (videoTracks.length > 1) {
-        cameraStream.value = new MediaStream([videoTracks[1]]);
-      }
+    conn.on("error", (err) => {
+      console.error("❌ [DATA] Error:", err);
     });
   });
+
+    // 2. Wait for Broadcaster to call us with the stream
+    peer.on("call", (call) => {
+      activeReceiverCall.value = call;
+      // Answer with the local mic stream if active (Intercom)
+      call.answer(receiverMicStream.value || undefined); 
+      
+      call.on("stream", (rs) => {
+        console.log("📥 [WEBRTC] Received remote stream:", rs.id);
+        
+        // Potential fix for black screen: ensure tracks are enabled and wait for unmute
+        rs.getTracks().forEach(t => {
+          t.enabled = true;
+          t.onunmute = () => {
+            console.log(`✅ Track ${t.kind} unmuted`);
+            // Force re-assignment to trigger watchers if needed
+            remoteStream.value = new MediaStream(rs.getTracks());
+          };
+          if (t.readyState === 'ended') console.warn(`⚠️ track ${t.kind} is ended`);
+        });
+
+        remoteStream.value = rs;
+
+        // Extract tracks for splitting
+        const videoTracks = rs.getVideoTracks();
+        const audioTracks = rs.getAudioTracks();
+
+        console.log(`📥 [WEBRTC] Tracks - Video: ${videoTracks.length}, Audio: ${audioTracks.length}`);
+
+        if (videoTracks.length > 0) {
+          // Track 0 is Screen
+          screenStream.value = new MediaStream([videoTracks[0], ...audioTracks]);
+          console.log("📺 [WEBRTC] Assigned Screen Stream:", videoTracks[0].label);
+          // Wait for track to be active
+          videoTracks[0].onunmute = () => {
+             console.log("📺 [WEBRTC] Screen track unmuted");
+          };
+        }
+        
+        if (videoTracks.length > 1) {
+          // Track 1 is Camera
+          cameraStream.value = new MediaStream([videoTracks[1]]);
+          console.log("📷 [WEBRTC] Assigned Camera Stream:", videoTracks[1].label);
+        } else {
+          cameraStream.value = null;
+        }
+      });
+    });
 
   peer.on("error", (err) => {
     handlePeerError(err);
@@ -657,7 +737,7 @@ const resetApp = (forceLanding = false) => {
   remoteStream.value = null;
   screenStream.value = null;
   cameraStream.value = null;
-  activeConnections.value = [];
+  activeReceiverCall.value = null;
   joinCode.value = "";
   isConnecting.value = false;
   error.value = null;
@@ -1065,7 +1145,7 @@ const resetApp = (forceLanding = false) => {
           class="fixed inset-0 bg-black flex items-center justify-center overflow-hidden" 
           @mousemove="handleDragMove"
           @mouseup="handleDragEnd"
-          @touchstart="handleMouseMove"
+          @touchstart="handleDragStart($event, 'move-pip')"
           @touchmove="handleDragMove"
           @touchend="handleDragEnd">
           
@@ -1091,6 +1171,7 @@ const resetApp = (forceLanding = false) => {
             <!-- Splitter Bar (Only in side-by-side) -->
             <div v-if="layoutMode === 'side-by-side' && cameraStream && screenStream"
                  @mousedown="handleDragStart($event, 'splitter')"
+                 @touchstart.passive="handleDragStart($event, 'splitter')"
                  class="w-2 hover:w-4 -mx-1 hover:-mx-2 z-30 cursor-col-resize flex items-center justify-center transition-all group">
               <div class="h-12 w-1 bg-white/20 rounded-full group-hover:bg-amber-500 transition-colors"></div>
             </div>
@@ -1204,7 +1285,7 @@ const resetApp = (forceLanding = false) => {
       </Transition>
       
       <!-- Hidden Audio for Intercom (Sender side hears Receiver) -->
-      <audio ref="receiverAudioElement" autoplay class="hidden"></audio>
+    <audio ref="receiverAudioElement" autoplay playsinline webkit-playsinline class="opacity-0 pointer-events-none absolute h-0 w-0"></audio>
     </main>
 
     <!-- Info Modal -->

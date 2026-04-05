@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -30,6 +31,16 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   // Intercom State
   MediaStream? _localMicStream;
   bool _isMicMuted = false;
+  
+  // Subscription Tracking
+  final List<StreamSubscription> _peerSubscriptions = [];
+  Timer? _connTimeout;
+
+  void _clearPeerSubscriptions() {
+    _connTimeout?.cancel();
+    for (var s in _peerSubscriptions) { s.cancel(); }
+    _peerSubscriptions.clear();
+  }
 
   void _toggleLayout() {
     setState(() {
@@ -50,7 +61,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     _remoteRenderer.dispose();
     _pipRenderer.dispose();
     _localMicStream?.dispose();
+    _clearPeerSubscriptions();
     _peer?.dispose();
+    _peer = null;
     super.dispose();
   }
 
@@ -69,8 +82,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     if (code.length != 6) return;
     setState(() => _isConnecting = true);
     _peer = Peer(options: PeerOptions(
+      host: '0.peerjs.com',
+      port: 443,
+      path: '/',
+      secure: true,
       debug: LogLevel.All,
       config: {
+        'sdpSemantics': 'unified-plan',
         'iceServers': [
           {'urls': 'stun:stun.l.google.com:19302'},
           {'urls': 'stun:stun.miwifi.com:3478'},
@@ -81,34 +99,93 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       }
     ));
 
-    _peer!.on("open").listen((id) async {
+    _clearPeerSubscriptions();
+    
+    _peerSubscriptions.add(_peer!.on("open").listen((id) async {
+       if (!mounted) return;
        setState(() => _peerStatus = "Ready (ID: $id)");
        debugPrint("✅ [PEER] Receive connection opened with ID: $id. Calling broadcaster: $code");
 
-       // Capture microphone for talkback before initiating the call
+       // Capture placeholder media tracks to "seed" the SDP offer with m-lines
        MediaStream? micStream;
        try {
          await Permission.microphone.request();
+         // Request minimal video/audio to get the slots in SDP
          micStream = await navigator.mediaDevices.getUserMedia({
            'audio': {'echoCancellation': true, 'noiseSuppression': true, 'autoGainControl': true},
-           'video': false
+           'video': {
+             'facingMode': 'user',
+             'width': 640,
+             'height': 480,
+             'frameRate': 8, // Very low rate for placeholder
+           }
          });
          _localMicStream = micStream;
-         for (var t in _localMicStream!.getAudioTracks()) { t.enabled = !_isMicMuted; }
+         
+         // CRITICAL: Disable tracks immediately so we don't send local media
+         for (var t in _localMicStream!.getVideoTracks()) { t.enabled = false; }
+         for (var t in _localMicStream!.getAudioTracks()) { t.enabled = false; }
        } catch (e) {
-         debugPrint("⚠️ [PEER] Failed to capture microphone: $e. Using dummy stream.");
-         micStream = await createLocalMediaStream('remote_receiver_dummy');
+         debugPrint("⚠️ [PEER] Failed to capture placeholder media: $e");
+         // Fallback to minimal audio-only if video fails
+         try {
+           micStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
+           for (var t in micStream.getAudioTracks()) { t.enabled = false; }
+         } catch (_) {
+           micStream = await createLocalMediaStream('remote_receiver_dummy');
+         }
        }
 
        // Initiate CALL directly to the broadcaster
-       final call = _peer!.call(code, micStream);
-       _setupCallHandlers(call);
-    });
+       if (mounted && _peer != null) {
+         final targetId = code;
+         debugPrint("📡 [PEER] Attempting to call: $targetId with placeholder stream");
+         
+         _connTimeout?.cancel();
+         _connTimeout = Timer(const Duration(seconds: 12), () {
+           if (mounted && _isConnecting && !_isConnected) {
+             debugPrint("⏳ [PEER] Connection timeout reaching target: $targetId");
+             setState(() {
+               _isConnecting = false;
+               _peerStatus = "Timeout - Check Code";
+             });
+             _clearPeerSubscriptions();
+             _peer?.dispose();
+             _peer = null;
+           }
+         });
 
-    _peer!.on("error").listen((err) {
+         // Add a protective delay to ensure signaling server synchronization
+         await Future.delayed(const Duration(milliseconds: 700));
+         if (!mounted || _peer == null) return;
+
+         final call = _peer!.call(targetId, micStream);
+         _setupCallHandlers(call);
+       }
+    }));
+
+    // Defensive: Shut down any accidental DataConnection (DC) handshake
+    _peerSubscriptions.add(_peer!.on("connection").listen((conn) {
+      debugPrint("⚠️ [PEER] Detected accidental DC from ${conn.peer}. Shutting it down...");
+      conn.close();
+    }));
+
+    _peerSubscriptions.add(_peer!.on("disconnected").listen((_) {
+      debugPrint("🔄 [PEER] Signaling disconnected. Attempting silent reconnect...");
+      if (mounted && _peer != null && !_peer!.destroyed) {
+        _peer!.reconnect();
+      }
+    }));
+
+    _peerSubscriptions.add(_peer!.on("close").listen((_) {
+      debugPrint("⛔ [PEER] Peer connection closed.");
+      if (mounted) setState(() => _isConnected = false);
+    }));
+
+    _peerSubscriptions.add(_peer!.on("error").listen((err) {
       debugPrint("❌ [PEER] Global Error: $err");
       if (mounted) setState(() => _isConnecting = false);
-    });
+    }));
   }
 
   void _setupCallHandlers(MediaConnection call) {
@@ -117,15 +194,23 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     try {
       final pc = call.peerConnection;
       pc?.onIceConnectionState = (state) {
-        debugPrint("❄️ [ICE] Connection State: $state");
+        debugPrint("❄️ [ICE] Connection: $state");
         if (mounted) setState(() => _iceState = state.toString().split('.').last);
       };
+      pc?.onSignalingState = (state) {
+        debugPrint("📡 [SIGNAL] State: $state");
+      };
+      pc?.onConnectionState = (state) {
+        debugPrint("🌐 [NET] State: $state");
+      };
     } catch (e) {
-      debugPrint("⚠️ [PEER] Could not attach ICE listener: $e");
+      debugPrint("⚠️ [PEER] Could not attach state listeners: $e");
     }
 
-    call.on("stream").listen((s) async {
-      debugPrint("🎥 [PEER] Stream received! Tracks: ${s.getVideoTracks().length}");
+    _peerSubscriptions.add(call.on("stream").listen((s) async {
+      if (!mounted) return;
+      _connTimeout?.cancel();
+      debugPrint("🎥 [PEER] Stream received! Video: ${s.getVideoTracks().length}, Audio: ${s.getAudioTracks().length}");
       if (mounted) {
         setState(() {
           _peerStatus = "Streaming";
@@ -143,9 +228,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           _hasPip = false;
         }
       }
-    });
+    }));
 
-    call.on("close").listen((_) {
+    _peerSubscriptions.add(call.on("close").listen((_) {
       debugPrint("⛔ [PEER] Call closed");
       if (mounted) {
         setState(() {
@@ -153,12 +238,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           _peerStatus = "Disconnected";
         });
       }
-    });
+    }));
 
-    call.on("error").listen((err) {
+    _peerSubscriptions.add(call.on("error").listen((err) {
       debugPrint("❌ [PEER] Call Error: $err");
+      _connTimeout?.cancel();
       if (mounted) setState(() => _isConnecting = false);
-    });
+    }));
   }
 
   @override

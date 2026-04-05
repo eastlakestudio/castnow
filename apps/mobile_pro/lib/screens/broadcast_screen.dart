@@ -34,26 +34,20 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
 
   // Source Selection
   bool _shareScreen = true;
-  bool _shareCamera = true;
+  bool _shareCamera = false;
   bool _shareMic = true;
   bool _isMuted = true;
-  CastNowLayoutMode _layoutMode = CastNowLayoutMode.pip;
-  bool _isSwapped = false;
   bool _isRemoteMuted = false;
+  
+  // Subscription Tracking
+  final List<StreamSubscription> _peerSubscriptions = [];
 
-  void _toggleLayout() {
-    setState(() {
-      _layoutMode = _layoutMode == CastNowLayoutMode.pip 
-        ? CastNowLayoutMode.sideBySide 
-        : CastNowLayoutMode.pip;
-    });
+  void _clearPeerSubscriptions() {
+    for (var s in _peerSubscriptions) { s.cancel(); }
+    _peerSubscriptions.clear();
   }
 
-  void _toggleSwap() {
-    setState(() {
-      _isSwapped = !_isSwapped;
-    });
-  }
+
 
   Timer? _limitTimer;
   int _remainingSeconds = 180;
@@ -77,7 +71,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     _localStream?.dispose();
     _cameraPreviewStream?.dispose();
     _limitTimer?.cancel();
+    _clearPeerSubscriptions();
     _peer?.dispose();
+    _peer = null;
     WakelockPlus.disable();
     super.dispose();
   }
@@ -126,47 +122,67 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
 
     setState(() => _isLoading = true);
     try {
+      if (Platform.isIOS) {
+        await Helper.setAppleAudioConfiguration(AppleAudioConfiguration(
+          appleAudioCategory: AppleAudioCategory.playAndRecord,
+          appleAudioCategoryOptions: {
+            AppleAudioCategoryOption.allowBluetooth,
+            AppleAudioCategoryOption.defaultToSpeaker,
+            AppleAudioCategoryOption.mixWithOthers
+          },
+          appleAudioMode: AppleAudioMode.videoChat,
+        ));
+      }
+
       final code = (100000 + math.Random().nextInt(900000)).toString();
-      _localStream = null;
       
-      // 1. Screen Sharing
+      // 1. Initialize a clean Master Stream container
+      // Use the first capture to initialize or start completely empty if supported
+      _localStream = null;
+      _cameraTrack = null;
+      _cameraPreviewStream = null;
+
+      // 2. Capture Screen (Broadcast Extension on iOS) - HIGH PRIORITY FOR TRACK 0
       if (_shareScreen) {
+        debugPrint("📱 [BROADCAST] Capturing Screen...");
         MediaStream? screenStream;
-        if (Platform.isAndroid) {
-          var status = await Permission.notification.status;
-          if (status.isDenied) status = await Permission.notification.request();
-          if (status.isGranted) {
-            await const MethodChannel('castnow_picker').invokeMethod('startMediaProjectionService', {'type': 'mediaProjection', 'code': code});
+        try {
+          if (Platform.isAndroid) {
+            var status = await Permission.notification.status;
+            if (status.isDenied) status = await Permission.notification.request();
+            if (status.isGranted) {
+              await const MethodChannel('castnow_picker').invokeMethod('startMediaProjectionService', {'type': 'mediaProjection', 'code': code});
+              screenStream = await navigator.mediaDevices.getDisplayMedia({'video': true, 'audio': false});
+            }
+          } else if (Platform.isIOS) {
+            screenStream = await navigator.mediaDevices.getDisplayMedia({
+              'video': {'deviceId': 'broadcast'},
+              'audio': false
+            });
+          } else {
             screenStream = await navigator.mediaDevices.getDisplayMedia({'video': true, 'audio': false});
           }
-        } else if (Platform.isIOS) {
-          screenStream = await navigator.mediaDevices.getDisplayMedia({
-            'video': {'deviceId': 'broadcast'},
-            'audio': false
-          });
-        } else {
-          screenStream = await navigator.mediaDevices.getDisplayMedia({'video': true, 'audio': false});
+        } catch (e) {
+          debugPrint("⚠️ [BROADCAST] Screen capture failed: $e");
         }
 
         if (screenStream != null && screenStream.getVideoTracks().isNotEmpty) {
-          var track = screenStream.getVideoTracks()[0];
-          _localStream ??= screenStream; 
-          if (_localStream != screenStream) {
-            _localStream!.addTrack(track);
-          }
+          _localStream = screenStream; // Screen is the base (track 0)
         }
+        await Future.delayed(const Duration(milliseconds: 800)); // Grace period for iOS extension startup
       }
 
-      // 2. Camera View
+      // 3. Capture Camera (Secondary track)
       if (_shareCamera) {
+        debugPrint("📸 [BROADCAST] Capturing Camera...");
         if (!kIsWeb) await Permission.camera.request();
         MediaStream camStream = await navigator.mediaDevices.getUserMedia({
           'audio': false,
           'video': {
             'facingMode': 'user',
-            'width': 1280,
-            'height': 720,
-            'frameRate': 30,
+            'width': 640,
+            'height': 480,
+            'frameRate': 24,
           }
         });
         if (camStream.getVideoTracks().isNotEmpty) {
@@ -180,10 +196,12 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
             _localStream!.addTrack(_cameraTrack!);
           }
         }
+        await Future.delayed(const Duration(milliseconds: 500));
       }
 
-      // 3. Microphone
+      // 4. Capture Microphone
       if (_shareMic) {
+        debugPrint("🎙️ [BROADCAST] Capturing Microphone...");
         if (!kIsWeb) await Permission.microphone.request();
         MediaStream micStream = await navigator.mediaDevices.getUserMedia({
           'audio': {
@@ -195,7 +213,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
         });
         if (micStream.getAudioTracks().isNotEmpty) {
           var audioTrack = micStream.getAudioTracks()[0];
-          audioTrack.enabled = !_isMuted; // Start muted as requested
+          audioTrack.enabled = !_isMuted;
+          
           if (_localStream == null) {
             _localStream = micStream;
           } else {
@@ -208,88 +227,162 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
         throw Exception("Failed to acquire any media stream.");
       }
 
+      // Finalize Local Preview
       _localRenderer.srcObject = _localStream;
       _isScreenSharing = _shareScreen;
 
       for (var track in _localStream!.getTracks()) {
-        track.onEnded = () => _stopBroadcast();
+        track.onEnded = () {
+          debugPrint("⏹️ [TRACK] Track ended: ${track.kind} - ${track.label}");
+          if (!_isStopping) _stopBroadcast();
+        };
       }
 
+      // Start PeerJS connection after all tracks are ready and added to the master stream
+      debugPrint("📡 [BROADCAST] Ready to connect. Tracks: ${_localStream!.getTracks().length}");
       await Future.delayed(const Duration(milliseconds: 1000));
       _connectWithRetry(code, _shareScreen, 0);
 
     } catch (e) {
       debugPrint("❌ Broadcast Start Error: $e");
-      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Critical Error: $e")));
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   void _connectWithRetry(String code, bool isScreen, int attempt) async {
-    if (attempt > 5) {
+    if (attempt > 8) {
       if (mounted) setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Network Connection Failed.")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Signal Server Unavailable. Please check your internet connection."),
+        duration: Duration(seconds: 5),
+      ));
       return;
     }
 
     try {
-      _peer?.dispose();
-      _peer = Peer(id: code, options: PeerOptions(debug: LogLevel.All, config: {
-        'iceServers': [
-          {'urls': 'stun:stun.l.google.com:19302'},
-          {'urls': 'stun:stun.miwifi.com:3478'},
-          {'urls': 'stun:stun.cdn.aliyun.com:3478'},
-          {'urls': 'stun:stun.cloudflare.com:3478'},
-          {'urls': 'stun:stun.tuna.tsinghua.edu.cn:3478'},
-        ]
-      }));
-
-      _peer!.on("open").listen((id) {
-        debugPrint("✅ [PEER] Broadcast ready on ID: $id");
-        if (mounted) setState(() { _peerId = id; _isLoading = false; });
-      });
-
-      _peer!.on("error").listen((error) {
-        debugPrint("❌ [PEER] Broadcast Error: $error");
-        if (error.toString().contains("Failed host lookup")) {
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted && _peerId == null) _connectWithRetry(code, isScreen, attempt + 1);
-          });
-        } else {
-          if (mounted) setState(() => _isLoading = false);
+      // 1. Thorough Cleanup of previous instance
+      if (_peer != null) {
+        debugPrint("🧹 [PEER] Cleaning up previous peer instance before retry...");
+        _clearPeerSubscriptions();
+        try {
+          _peer!.dispose();
+        } catch (e) {
+          debugPrint("⚠️ [PEER] Dispose error (ignoring): $e");
         }
-      });
+        _peer = null;
+        // Exponential backoff
+        await Future.delayed(Duration(milliseconds: 500 + (attempt * 1000)));
+      }
+
+      if (!mounted || _isStopping) return;
+
+      debugPrint("📡 [PEER] Connecting to signal server (Attempt ${attempt + 1})...");
       
-      // Listen for incoming CALLS from viewers (Receivers)
-      _peer!.on("call").listen((call) {
-        debugPrint("📞 [PEER] Incoming call from receiver...");
+      _peer = Peer(id: code, options: PeerOptions(
+        host: '0.peerjs.com',
+        port: 443,
+        path: '/',
+        secure: true,
+        debug: LogLevel.All,
+        config: {
+          'sdpSemantics': 'unified-plan',
+          'iceServers': [
+            {'urls': 'stun:stun.l.google.com:19302'},
+            {'urls': 'stun:stun.miwifi.com:3478'},
+            {'urls': 'stun:stun.cdn.aliyun.com:3478'},
+            {'urls': 'stun:stun.cloudflare.com:3478'},
+          ]
+        }
+      ));
+
+      // 2. Wrap all listeners in robust error handling
+      _peerSubscriptions.add(_peer!.on("open").listen(
+        (id) {
+          debugPrint("✅ [PEER] Broadcast ready on ID: $id");
+          if (mounted) setState(() { _peerId = id; _isLoading = false; });
+        },
+        onError: (e) => debugPrint("❌ [PEER] Open Stream Error: $e"),
+        cancelOnError: false,
+      ));
+
+      _peerSubscriptions.add(_peer!.on("disconnected").listen(
+        (_) {
+          debugPrint("🔄 [PEER] Signaling disconnected.");
+          if (mounted && _peer != null && !_peer!.destroyed && !_isStopping) {
+            debugPrint("📢 [PEER] Attempting reconnect...");
+            _peer!.reconnect();
+          }
+        },
+        onError: (e) => debugPrint("❌ [PEER] Disconnect Stream Error: $e"),
+      ));
+
+      _peerSubscriptions.add(_peer!.on("close").listen(
+        (_) {
+          debugPrint("⛔ [PEER] Peer connection closed.");
+          if (mounted && !_isStopping) {
+            _connectWithRetry(code, isScreen, 0); 
+          }
+        },
+        onError: (e) => debugPrint("❌ [PEER] Close Stream Error: $e"),
+      ));
+
+      _peerSubscriptions.add(_peer!.on("error").listen(
+        (error) {
+          debugPrint("❌ [PEER] Socket/Signal Error: $error");
+          if (_isStopping) return;
+
+          final errStr = error.toString().toLowerCase();
+          bool shouldRetry = errStr.contains("failed host lookup") || 
+                            errStr.contains("socketexception") ||
+                            errStr.contains("unavailable-id") || 
+                            errStr.contains("invalid-id") ||
+                            errStr.contains("websocketchannelexception");
+
+          if (shouldRetry) {
+             debugPrint("🔄 [PEER] Recoverable error detected, retrying in 3s...");
+             Future.delayed(const Duration(seconds: 3), () {
+               if (mounted && !_isStopping) _connectWithRetry(code, isScreen, attempt + 1);
+             });
+          } else {
+             if (mounted) setState(() => _isLoading = false);
+          }
+        },
+        onError: (e) => debugPrint("❌ [PEER] Error Stream Exception: $e"),
+      ));
+
+      // 3. Listen for incoming DATA connections to trigger CALL back
+      _peerSubscriptions.add(_peer!.on("connection").listen((dynamic conn) {
+        if (conn is! DataConnection) return;
+        debugPrint("🤝 [PEER] New receiver data connection: ${conn.peer}");
+        
+        // When a data connection opens, we CALL them back with our stream
+        _peerSubscriptions.add(conn.on("open").listen((_) {
+          debugPrint("📡 [PEER] Data channel open. Calling receiver back with stream...");
+          if (_localStream != null) {
+            final call = _peer!.call(conn.peer, _localStream!);
+            _setupCallHandlers(call);
+          }
+        }));
+      }));
+      
+      // 4. Listen for incoming CALLS (Viewer to Broadcaster intercom)
+      _peerSubscriptions.add(_peer!.on("call").listen((call) {
+        debugPrint("📞 [PEER] Incoming intercom call from receiver...");
         if (_localStream != null) {
+          _setupCallHandlers(call);
           call.answer(_localStream!);
           
           if (_isScreenSharing && Platform.isAndroid) {
             const MethodChannel('castnow_picker').invokeMethod('minimizeApp');
           }
-
-          call.on("stream").listen((remoteStream) {
-            debugPrint("🎙️ [PEER] Received talkback stream from receiver!");
-            if (mounted) {
-              setState(() {
-                _isConnected = true;
-                _remoteAudioRenderer.srcObject = remoteStream;
-                for (var t in remoteStream.getAudioTracks()) { 
-                  t.enabled = !_isRemoteMuted; 
-                }
-              });
-            }
-          });
-
-          call.on("close").listen((_) {
-            debugPrint("⛔ [PEER] Receiver disconnected");
-            if (mounted) setState(() => _isConnected = false);
-          });
         }
-      });
+      }, onError: (e) => debugPrint("❌ [PEER] Incoming Call Listener Error: $e")));
 
       if (!widget.isPro) {
+        _limitTimer?.cancel();
         _limitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
           if (!mounted) { timer.cancel(); return; }
           setState(() {
@@ -299,9 +392,34 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
         });
       }
     } catch (e) {
-      debugPrint("❌ [PEER] Connection Setup Exception: $e");
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint("❌ [PEER] Critical Connection Exception: $e");
+      if (mounted && !_isStopping) {
+        Future.delayed(const Duration(seconds: 5), () => _connectWithRetry(code, isScreen, attempt + 1));
+      }
     }
+  }
+
+  void _setupCallHandlers(MediaConnection call) {
+    _peerSubscriptions.add(call.on("stream").listen(
+      (remoteStream) {
+        debugPrint("🎙️ [PEER] Received talkback stream!");
+        if (mounted) {
+          setState(() {
+            _isConnected = true;
+            _remoteAudioRenderer.srcObject = remoteStream;
+            for (var t in remoteStream.getAudioTracks()) { 
+              t.enabled = !_isRemoteMuted; 
+            }
+          });
+        }
+      },
+      onError: (e) => debugPrint("❌ [PEER] Call Stream Error: $e")
+    ));
+
+    _peerSubscriptions.add(call.on("close").listen((_) {
+      debugPrint("⛔ [PEER] Receiver disconnected");
+      if (mounted) setState(() => _isConnected = false);
+    }));
   }
 
 
@@ -309,7 +427,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
   void _stopBroadcast() async {
     if (!mounted || _isStopping) return;
     setState(() => _isStopping = true);
+    _clearPeerSubscriptions();
     _peer?.dispose();
+    _peer = null;
     if (Platform.isAndroid) const MethodChannel('castnow_picker').invokeMethod('stopMediaProjectionService');
     _localStream?.dispose();
     _localRenderer.srcObject = null;
@@ -486,14 +606,26 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
                             title: "Screen Mirror", 
                             subtitle: "Broadcast your entire iOS screen", 
                             value: _shareScreen, 
-                            onChanged: (val) => setState(() => _shareScreen = val)
+                            onChanged: (val) {
+                              if (!val && !_shareCamera) return; // Force at least one
+                              setState(() {
+                                _shareScreen = val;
+                                if (val) _shareCamera = false;
+                              });
+                            }
                           ),
                           _buildSourceCard(
                             icon: Icons.videocam_rounded, 
                             title: "Camera View", 
                             subtitle: "Share high-quality camera stream", 
                             value: _shareCamera, 
-                            onChanged: (val) => setState(() => _shareCamera = val)
+                            onChanged: (val) {
+                              if (!val && !_shareScreen) return; // Force at least one
+                              setState(() {
+                                _shareCamera = val;
+                                if (val) _shareScreen = false;
+                              });
+                            }
                           ),
                           _buildSourceCard(
                             icon: Icons.mic_rounded, 
@@ -581,43 +713,25 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
                       decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white10)),
                       clipBehavior: Clip.antiAlias,
                       child: _localStream != null ? Builder(builder: (context) {
-                        final mainRenderer = _isSwapped ? _cameraRenderer : _localRenderer;
-                        final secondaryRenderer = _isSwapped ? _localRenderer : _cameraRenderer;
                         final hasBoth = _isScreenSharing && _shareCamera;
 
-                        if (!hasBoth || _layoutMode == CastNowLayoutMode.pip) {
-                          return Stack(
-                            children: [
-                              RTCVideoView(mainRenderer, mirror: (!_isSwapped && !_isScreenSharing) || (_isSwapped && true)),
-                              if (hasBoth)
-                                Positioned(
-                                  right: 12,
-                                  bottom: 12,
-                                  child: GestureDetector(
-                                    onTap: _toggleSwap,
-                                    child: Container(
-                                      width: 100,
-                                      height: 130,
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: Colors.white24, width: 2),
-                                        boxShadow: const [BoxShadow(color: Colors.black87, blurRadius: 15, spreadRadius: 2)],
-                                      ),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: RTCVideoView(secondaryRenderer, mirror: (!_isSwapped && true) || (_isSwapped && !_isScreenSharing)),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          );
+                        if (!hasBoth) {
+                          final activeRenderer = _isScreenSharing ? _localRenderer : _cameraRenderer;
+                          return RTCVideoView(activeRenderer, mirror: _shareCamera && !_isScreenSharing);
                         } else {
                           final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
                           return Flex(
                             direction: isLandscape ? Axis.horizontal : Axis.vertical,
                             children: [
-                              Expanded(child: RTCVideoView(mainRenderer, mirror: (!_isSwapped && !_isScreenSharing) || (_isSwapped && true))),
-                              Container(width: isLandscape ? 1 : 0, height: isLandscape ? 0 : 1, color: Colors.white10),
-                              Expanded(child: RTCVideoView(secondaryRenderer, mirror: (!_isSwapped && true) || (_isSwapped && !_isScreenSharing))),
+                              // Screen sharing takes priority/equal space
+                              Expanded(child: RTCVideoView(_localRenderer, mirror: false)),
+                              Container(
+                                width: isLandscape ? 1 : double.infinity, 
+                                height: isLandscape ? double.infinity : 1, 
+                                color: Colors.white10
+                              ),
+                              // Camera view
+                              Expanded(child: RTCVideoView(_cameraRenderer, mirror: true)),
                             ],
                           );
                         }
@@ -670,22 +784,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
                           _buildControl(icon: Icons.flip_camera_ios_rounded, label: "Flip", color: Colors.white, onTap: _switchCamera),
                         _buildControl(icon: _isMuted ? Icons.mic_off : Icons.mic, label: _isMuted ? "Unmute" : "Mute", color: _isMuted ? Colors.red : Colors.white, onTap: _toggleMute),
                         _buildControl(icon: _isRemoteMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded, label: "Talk", color: _isRemoteMuted ? Colors.white24 : Colors.cyanAccent, onTap: _toggleRemoteMute),
-                        
-                        if (_isScreenSharing && _shareCamera) ...[
-                          Container(height: 24, width: 1, color: Colors.white10, margin: const EdgeInsets.symmetric(horizontal: 4)),
-                          _buildControl(
-                            icon: _layoutMode == CastNowLayoutMode.pip ? Icons.dashboard_outlined : Icons.view_quilt_outlined, 
-                            label: "Layout", 
-                            color: Colors.white, 
-                            onTap: _toggleLayout
-                          ),
-                          _buildControl(
-                            icon: Icons.swap_horiz_rounded, 
-                            label: "Swap", 
-                            color: Colors.white, 
-                            onTap: _toggleSwap
-                          ),
-                        ],
                         
                         Container(height: 24, width: 1, color: Colors.white10, margin: const EdgeInsets.symmetric(horizontal: 4)),
                         _buildControl(icon: Icons.stop_circle, label: "Stop", color: Colors.redAccent, onTap: _stopBroadcast),
