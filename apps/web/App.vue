@@ -113,7 +113,14 @@ let toastTimeout = null;
 watch([receiverAudioElement, receiverAudioStream], ([el, stream]) => {
   if (el && stream) {
     el.srcObject = stream;
-    el.play().catch(e => console.error("Broadcaster audio playback failed", e));
+    el.muted = false; // Ensure not muted
+    el.volume = 1.0; // Ensure full volume
+    el.play().then(() => {
+      console.log("🔊 [WEBRTC] Intercom audio playback started successfully");
+    }).catch(e => {
+      console.error("❌ [WEBRTC] Broadcaster audio playback failed (Auto-play policy?):", e);
+      // Fallback: If blocked, we might need a "Click to Hear" button or similar interaction
+    });
   }
 });
 
@@ -271,13 +278,13 @@ const handleStartCasting = async () => {
       }
       const ss = await navigator.mediaDevices.getDisplayMedia({
         video: { cursor: "always" },
-        audio: true,
+        audio: false, // DISABLE: As found, Tab audio creates incompatible multi-audio SDPs on iOS.
       });
       
       // Add Video Track first
       ss.getVideoTracks().forEach(t => combinedStream.addTrack(t));
-      // Add Audio Tracks
-      ss.getAudioTracks().forEach(t => combinedStream.addTrack(t));
+      // DISCARD Screen Audio: As previously found, multi-audio tracks cause iOS negotiation failure.
+      // We explicitly DO NOT add ss.getAudioTracks() here.
       
       localScreenStream.value = new MediaStream(ss.getVideoTracks());
       // Stop broadcast if screen share is stopped via browser UI
@@ -300,7 +307,7 @@ const handleStartCasting = async () => {
       });
     }
 
-    // 3. Microphone (Always capture if selected, don't skip if screen audio exists)
+    // 3. Microphone (The SOLE source of audio for the broadcast stream)
     if (selectedSources.value.includes('mic')) {
       try {
         const as = await navigator.mediaDevices.getUserMedia({ 
@@ -312,7 +319,7 @@ const handleStartCasting = async () => {
         });
         as.getAudioTracks().forEach(t => {
           t.enabled = !isMicMuted.value;
-          combinedStream.addTrack(t);
+          combinedStream.addTrack(t); // This should be the ONLY audio track in the stream
           console.log("🎙️ [WEBRTC] Added microphone track:", t.label);
         });
       } catch (e) {
@@ -338,23 +345,34 @@ const handleStartCasting = async () => {
       peerId.value = id;
       isConnecting.value = false;
     });
+    // 2. Active Push: When a receiver connects via DataConnection, we PUSH the video stream
     peer.on("connection", (conn) => {
       activeConnections.value.push(conn);
       conn.on("open", () => {
-        const call = peer.call(conn.peer, localStream.value);
-        setupCallHandlers(call);
+        const stream = localStream.value;
+        if (stream) {
+          console.log(`🚀 [WEBRTC] INITIATING FORWARD VIDEO CALL TO ${conn.peer} | Tracks: V=${stream.getVideoTracks().length}, A=${stream.getAudioTracks().length}`);
+          if (stream.getVideoTracks().length < 2 && selectedSources.value.includes('screen') && selectedSources.value.includes('camera')) {
+            console.warn("⚠️ [WEBRTC] Potential multi-track issue: Expecting 2 videos but stream only has 1!");
+          }
+          const call = peer.call(conn.peer, stream);
+          setupCallHandlers(call);
+        }
       });
       conn.on("close", () => {
         activeConnections.value = activeConnections.value.filter(c => c.peer !== conn.peer);
       });
     });
 
-    // Handle incoming talkback calls from Receivers (and direct MediaConnections)
+    // 3. Passive Listen: Handle incoming talkback calls from Receivers (Intercom)
     peer.on("call", (call) => {
-      console.log("📞 [PEER] Broadcaster received incoming intercom/direct call!");
-      call.answer(localStream.value); // Answer with our broadcast media!
+      console.log("📞 [PEER] Broadcaster received incoming intercom/direct call from:", call.peer);
+      
+      // ANSWER with local stream to provide audio return, but the primary video is sent via forward call
+      call.answer(localStream.value); 
+      
       call.on("stream", (rs) => {
-        console.log("🎙️ [WEBRTC] Broadcaster received talkback stream");
+        console.log("🎙️ [WEBRTC] Broadcaster received talkback stream | Audio Tracks:", rs.getAudioTracks().length);
         receiverAudioStream.value = rs;
       });
       call.on("close", () => {
