@@ -618,10 +618,18 @@ const handleJoin = async () => {
             resetApp();
           }
         };
+
+        // NEW: Direct track monitoring (Unified Plan)
+        // This is more robust than the 'stream' event for multi-video
+        call.peerConnection.ontrack = (event) => {
+          console.log("🔗 [v9.1] OnTrack Event Detected:", event.track.kind);
+          updateSplitStreams();
+        };
       }
 
       // Auto-exit ONLY if ALL tracks (audio & video) are ended
       const checkAllTracksEnded = () => {
+        if (!rs) return;
         const liveTracks = rs.getTracks().filter(t => t.readyState === 'live');
         console.log(`📊 [v9.1] Track Status Check: ${liveTracks.length} live tracks remaining`);
         if (liveTracks.length === 0) {
@@ -632,7 +640,6 @@ const handleJoin = async () => {
 
       console.log(`📡 [v9.1] Attaching listeners to ${rs.getTracks().length} tracks`);
       rs.getTracks().forEach(track => {
-        console.log(`🔗 [v9.1] Monitoring track: ${track.kind} (${track.id}) - State: ${track.readyState}`);
         track.onended = () => {
           console.log(`📺 [v9.1] Track ended (${track.kind}): ${track.id}`);
           checkAllTracksEnded();
@@ -640,30 +647,37 @@ const handleJoin = async () => {
       });
       
       const updateSplitStreams = () => {
-        if (!rs) return;
-        const videoTracks = rs.getVideoTracks();
-        const audioTracks = rs.getAudioTracks();
+        // We use call.remoteStream or rs interchangeably in PeerJS, 
+        // but let's be careful to combine all tracks found so far.
+        const currentStream = call.remoteStream || rs;
+        if (!currentStream) return;
+
+        const videoTracks = currentStream.getVideoTracks();
+        const audioTracks = currentStream.getAudioTracks();
         
+        console.log(`🎞️ [v9.1] Splitting Streams. Total Video Tracks: ${videoTracks.length}`);
+
         if (videoTracks.length > 0) {
           screenStream.value = new MediaStream([videoTracks[0], ...audioTracks]);
         }
+        
         if (videoTracks.length > 1) {
           cameraStream.value = new MediaStream([videoTracks[1]]);
-          console.log("📷 [v9.1] Multi-track detected: Secondary Video bound");
+          console.log("📷 [v9.1] Multi-track detected: Secondary Video bound (Camera)");
         } else {
           cameraStream.value = null;
-          remoteStream.value = new MediaStream(rs.getTracks());
+          // Fallback single stream (might include Screen or whatever is first)
+          remoteStream.value = new MediaStream(currentStream.getTracks());
         }
       };
 
       updateSplitStreams();
-      setTimeout(updateSplitStreams, 500);
-      setTimeout(updateSplitStreams, 1500);
-      setTimeout(updateSplitStreams, 3000);
+      // Keep short polling for safety in messy hands-shakes
+      setTimeout(updateSplitStreams, 1000);
+      setTimeout(updateSplitStreams, 2500);
 
       rs.getTracks().forEach(t => {
         t.enabled = true;
-        if (t.kind === 'audio') console.log("🔊 [v9.1] Remote audio enabled");
       });
     });
   });
@@ -1260,7 +1274,7 @@ const resetApp = (forceLanding = false) => {
                           layoutMode === 'pip' ? 'w-full h-full' : 'rounded-2xl',
                           isDragging ? 'no-transition' : 'transition-all duration-500']"
                  :style="layoutMode === 'side-by-side' ? { width: (splitRatio * 100) + '%' } : (layoutMode === 'pip' && isSwapped ? 'order: 2' : '')">
-              <video :ref="isSwapped ? 'cameraVideo' : 'screenVideo'" 
+              <video ref="screenVideo" 
                      autoplay playsinline 
                      :muted="isMuted"
                      class="max-w-full max-h-full object-contain" />
@@ -1291,7 +1305,7 @@ const resetApp = (forceLanding = false) => {
                  } : { width: ((1 - splitRatio) * 100) + '%' }"
                  @mousedown="handleDragStart($event, 'move-pip')"
                  @touchstart="handleDragStart($event, 'move-pip')">
-              <video :ref="isSwapped ? 'screenVideo' : 'cameraVideo'" 
+              <video ref="cameraVideo" 
                      autoplay playsinline 
                      :muted="isMuted"
                      class="max-w-full max-h-full object-contain pointer-events-none" />
