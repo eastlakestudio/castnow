@@ -38,7 +38,8 @@
         "muted": "已静音",
         "mic_on": "麦克风",
         "active_sync": "多源同步传输中",
-        "camera_switched": "摄像头镜头已切换"
+        "camera_switched": "摄像头镜头已切换",
+        "receiver_connected": "接收端已连接"
     },
     "receiver": {
         "title": "输入访问码",

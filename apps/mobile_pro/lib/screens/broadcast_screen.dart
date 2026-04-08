@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'dart:io';
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,6 +31,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
   bool _isLoading = false;
   bool _isStopping = false;
   bool _isConnected = false;
+  String? _receiverInfo;
 
   // Source Selection
   bool _shareScreen = true;
@@ -41,6 +42,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
   
   // Subscription Tracking
   final List<StreamSubscription> _peerSubscriptions = [];
+  final List<MediaConnection> _activeCalls = [];
 
   void _clearPeerSubscriptions() {
     for (var s in _peerSubscriptions) { s.cancel(); }
@@ -357,33 +359,52 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
         onError: (e) => debugPrint("❌ [PEER] Error Stream Exception: $e"),
       ));
 
-      // 3. Listen for incoming DATA connections to trigger CALL back
-      _peerSubscriptions.add(_peer!.on("connection").listen((dynamic conn) {
-        if (conn is! DataConnection) return;
-        debugPrint("🤝 [PEER] New receiver data connection: ${conn.peer}");
+      // 3. v9.1 Media-Only Handshake: Unified handler for 'Knock' and 'Intercom'
+      _peerSubscriptions.add(_peer!.on("call").listen((dynamic incoming) {
+        if (incoming is! MediaConnection) return;
+        final remoteCall = incoming;
+        debugPrint("🤝 [v9.1] BROADCASTER: Incoming call from: ${remoteCall.peer}");
         
-        // When a data connection opens, we CALL them back with our stream
-        _peerSubscriptions.add(conn.on("open").listen((_) {
-          debugPrint("📡 [PEER] Data channel open. Calling receiver back with stream...");
-          if (_localStream != null) {
-            final call = _peer!.call(conn.peer, _localStream!);
-            _setupCallHandlers(call);
-          }
-        }));
-      }));
-      
-      // 4. Listen for incoming CALLS (Viewer to Broadcaster intercom)
-      _peerSubscriptions.add(_peer!.on("call").listen((call) {
-        debugPrint("📞 [PEER] Incoming intercom call from receiver...");
-        if (_localStream != null) {
-          _setupCallHandlers(call);
-          call.answer(_localStream!);
+        // A. Identify 'Knock' (Using CVN ID format and not yet connected)
+        if (remoteCall.peer.startsWith("cnv_") && !_isConnected) {
+          debugPrint("🏁 [v9.1] Detected 'Media Knock'. Parsing metadata & recalling...");
           
-          if (_isScreenSharing && Platform.isAndroid) {
-            const MethodChannel('castnow_picker').invokeMethod('minimizeApp');
+          final parts = remoteCall.peer.split("_");
+          if (parts.length >= 3 && mounted) {
+            setState(() => _receiverInfo = "${parts[1]} on ${parts[2]}");
+          }
+
+          // Flash Close and Recall: Add a tiny delay and try-catch to prevent peerdart crash
+          Future.delayed(const Duration(milliseconds: 100), () {
+            try {
+              remoteCall.close();
+            } catch (e) {
+              debugPrint("⚠️ Peerdart close-after-event suppression: $e");
+            }
+          });
+
+          Future.delayed(const Duration(milliseconds: 1000), () {
+            if (_localStream != null && _peer != null && mounted) {
+              // Peerdart 0.5.6 supports metadata as a named parameter
+              final recall = _peer!.call(remoteCall.peer, _localStream!);
+              _activeCalls.add(recall);
+              _setupCallHandlers(recall);
+              setState(() => _isConnected = true);
+            }
+          });
+        } else {
+          // B. Treat as Intercom / Standard Call
+          debugPrint("📞 [v9.1] Answering standard/intercom call...");
+          if (_localStream != null && mounted) {
+            _setupCallHandlers(remoteCall);
+            remoteCall.answer(_localStream!);
+            
+            if (_isScreenSharing && Platform.isAndroid) {
+              const MethodChannel('castnow_picker').invokeMethod('minimizeApp');
+            }
           }
         }
-      }, onError: (e) => debugPrint("❌ [PEER] Incoming Call Listener Error: $e")));
+      }, onError: (e) => debugPrint("❌ [v9.1] Call Listener Error: $e")));
 
       if (!widget.isPro) {
         _limitTimer?.cancel();
@@ -404,6 +425,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
   }
 
   void _setupCallHandlers(MediaConnection call) {
+    if (!_activeCalls.contains(call)) _activeCalls.add(call);
+
     _peerSubscriptions.add(call.on("stream").listen(
       (remoteStream) {
         debugPrint("🎙️ [PEER] Received talkback stream!");
@@ -424,8 +447,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     ));
 
     _peerSubscriptions.add(call.on("close").listen((_) {
-      debugPrint("⛔ [PEER] Receiver disconnected");
-      if (mounted) setState(() => _isConnected = false);
+      debugPrint("⛔ [PEER] Call connection closed");
+      _activeCalls.remove(call);
+      if (mounted && _activeCalls.isEmpty) {
+        setState(() => _isConnected = false);
+      }
     }));
   }
 
@@ -434,10 +460,28 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
   void _stopBroadcast() async {
     if (!mounted || _isStopping) return;
     setState(() => _isStopping = true);
+    
+    // Explicitly close all active calls to signal the receivers
+    debugPrint("🛑 [v9.1] Closing ${_activeCalls.length} active calls before stopping...");
+    for (var call in List.from(_activeCalls)) {
+      try {
+        debugPrint("📡 [v9.1] Sending BYE to receiver: ${call.peer}");
+        call.close();
+      } catch (e) {
+        debugPrint("⚠️ Error closing call: $e");
+      }
+    }
+    _activeCalls.clear();
+
     _clearPeerSubscriptions();
     final p = _peer;
     _peer = null;
-    Future.delayed(const Duration(milliseconds: 500), () => p?.dispose());
+    
+    // Give some time for 'close' packets to fly before destroying the peer
+    Future.delayed(const Duration(milliseconds: 300), () {
+      debugPrint("🧹 [v9.1] Disposing Peer instance...");
+      p?.dispose();
+    });
     if (Platform.isAndroid) const MethodChannel('castnow_picker').invokeMethod('stopMediaProjectionService');
     _localStream?.dispose();
     _localRenderer.srcObject = null;
@@ -731,7 +775,29 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
             child: Text(char, style: const TextStyle(color: kPrimaryColor, fontSize: 32, fontWeight: FontWeight.bold)),
           )).toList()),
         ),
-        if (!_isConnected) const SizedBox(height: 12),
+        if (_isConnected && _receiverInfo != null) ...[
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.green.withOpacity(0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.devices_rounded, color: Colors.green, size: 14),
+                const SizedBox(width: 8),
+                Text(
+                  "Receiver: $_receiverInfo",
+                  style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                ),
+              ],
+            ),
+          ),
+        ] else if (!_isConnected) 
+          const SizedBox(height: 12),
       ],
     ) : const SizedBox.shrink();
 

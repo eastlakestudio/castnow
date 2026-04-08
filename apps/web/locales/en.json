@@ -38,7 +38,8 @@
         "muted": "Muted",
         "mic_on": "Mic On",
         "active_sync": "Syncing Multi-Source",
-        "camera_switched": "Camera Lens Switched"
+        "camera_switched": "Camera Lens Switched",
+        "receiver_connected": "Receiver Connected"
     },
     "receiver": {
         "title": "Enter Access Key",

@@ -90,6 +90,7 @@ const receiverAudioStream = ref(null); // Sender side: audio stream from receive
 const receiverAudioElement = ref(null);
 const activeReceiverCall = ref(null); // Track the active call for the receiver
 const activeTalkbackCall = ref(null); // Track the outgoing intercom call
+const lastReceiverInfo = ref(""); // v7: Metadata from the remote receiver
 
 const videoDevices = ref([]);
 const hasMultipleCameras = computed(() => videoDevices.value.length > 1);
@@ -356,52 +357,43 @@ const handleStartCasting = async () => {
       peerId.value = id;
       isConnecting.value = false;
     });
-    // Track peers we've already sent a forward video call to
-    const sentCalls = new Set();
 
-    // 3. Mirror Call Architecture (v4): Handle incoming talkback and push video
-    peer.on("call", (call) => {
-      const iosId = call.peer;
-      console.log("📞 [PEER] Broadcaster received incoming intercom/direct call from:", iosId);
+    // 4. v9.1 Media-Only Handshake Architecture (ID Embedding)
+    peer.on("call", (incomingCall) => {
+      console.log("🤝 [v9.1] Broadcaster received 'Media Knock' from ID:", incomingCall.peer);
       
-      // ANSWER the reverse link for intercom
-      call.answer(localStream.value); 
-      
-      // MIRROR CALL: Active Push for V=2 Video dominant stream
-      // Using a Set guard ensures we only initiate ONE high-priority forward call per session
-      if (localStream.value && localStream.value.getVideoTracks().length >= 2) {
-        if (!sentCalls.has(iosId)) {
-          sentCalls.add(iosId);
-          console.log("🚀 [WEBRTC] TRIGGERING SINGLE MIRROR VIDEO CALL TO", iosId, "| V=2 confirmed");
-          const forwardCall = peer.call(iosId, localStream.value);
-          setupCallHandlers(forwardCall);
+      // A. ID Parsing: Discover receiver info from the ID string itself
+      if (incomingCall.peer.startsWith("cnv_")) {
+        const parts = incomingCall.peer.split("_");
+        if (parts.length >= 3) {
+          const browser = parts[1];
+          const os = parts[2];
+          console.log(`📥 [v9.1] ID Metadata Decoded: ${browser} on ${os}`);
+          lastReceiverInfo.value = `${browser} on ${os}`;
         }
       }
-      
-      call.on("stream", (rs) => {
-        console.log("🎙️ [WEBRTC] Broadcaster received talkback stream | Audio Tracks:", rs.getAudioTracks().length);
-        receiverAudioStream.value = rs;
-      });
-      call.on("close", () => {
-        sentCalls.delete(iosId);
-        receiverAudioStream.value = null;
-      });
-    });
 
-    // 4. Handle incoming Viewer data connections to initiate active Mirror Call (Web-to-Web)
-    peer.on("connection", (conn) => {
-      console.log("🤝 [PEER] Broadcaster received new Viewer data connection:", conn.peer);
-      // Wait for data connection to open before calling to ensure Viewer's peer is ready
-      conn.on("open", () => {
-        console.log("🚀 [WEBRTC] Active PUSH Video to Viewer:", conn.peer);
-        const forwardCall = peer.call(conn.peer, localStream.value);
+      // B. Traditional Metadata Fallback (if any)
+      if (incomingCall.metadata && !lastReceiverInfo.value) {
+        const payload = incomingCall.metadata;
+        if (payload && payload.type === 'dev') {
+          lastReceiverInfo.value = `${payload.browser || 'Browser'} on ${payload.os}`;
+        }
+      }
+
+      // C. Flash Close & Recall
+      // We close the knock immediately to ensure a clean negotiation for Video=2
+      console.log("🏁 [v9.1] Flash closing knock call. Initiating stable Video=2 Recall...");
+      incomingCall.close();
+
+      setTimeout(() => {
+        if (!localStream.value) return;
+        
+        console.log("🚀 [v9.1] Initiating stable Mirror Call (Video=2) back to receiver:", incomingCall.peer);
+        const forwardCall = peer.call(incomingCall.peer, localStream.value);
+        
         setupCallHandlers(forwardCall);
-        activeConnections.value.push(conn);
-      });
-      
-      conn.on("data", (data) => {
-        console.log("📥 [DATA] Broadcaster received from Viewer:", data);
-      });
+      }, 1000);
     });
 
     peer.on("error", handlePeerError);
@@ -561,8 +553,13 @@ const handleJoin = async () => {
     console.warn("Could not pre-allocate receiver microphone", err);
   }
 
-  // Viewer needs their own Peer ID to receive the call
-  const peer = new window.Peer({
+  const browser = getBrowser().replace(/\s+/g, '');
+  const os = getOS().replace(/\s+/g, '');
+  const randomPart = Math.random().toString(36).substring(7);
+  // Using single underscores as separators (Double dashes '--' are invalid in some PeerJS servers)
+  const richId = `cnv_${browser}_${os}_${randomPart}`;
+
+  const peer = new window.Peer(richId, {
     config: { 
       iceServers: getIceServers(),
       sdpSemantics: 'unified-plan'
@@ -572,94 +569,108 @@ const handleJoin = async () => {
   peerInstance.value = peer;
 
   peer.on("open", (id) => {
-    console.log("🚀 [PEER] Viewer Peer Open, ID:", id);
-    const conn = peer.connect(joinCode.value, { serialization: 'json' });
-    console.log("📡 [PEER] Attempting to connect to Broadcaster:", joinCode.value);
-
-    conn.on("open", () => {
-      console.log("🤝 [DATA] Connection to Broadcaster OPEN");
-      const info = getDeviceInfo();
-      setTimeout(() => conn.send(info), 500);
-      appState.value = STATES.RECEIVER_ACTIVE;
-      isConnecting.value = false;
-    });
-
-    conn.on("data", (data) => {
-      console.log("📥 [DATA] Received from Broadcaster:", data);
-      try {
-        const payload = typeof data === "string" ? JSON.parse(data) : data;
-        if (payload && payload.type === "dev") {
-          remoteDeviceInfo.value = `${payload.os} ${payload.model || ""}`.trim();
-        }
-      } catch (e) {
-        console.error("Data Parse Error:", e);
-      }
-    });
-
-    conn.on("close", () => {
-      console.log("⛔ [DATA] Connection CLOSED");
-      appState.value = STATES.BROADCAST_ENDED;
-      resetApp();
-    });
+    console.log("🚀 [v9.1] Viewer Peer Open, ID:", id);
+    // Send the knock-knock call
+    const knockCall = peer.call(joinCode.value, receiverMicStream.value || new MediaStream());
+    console.log("📡 [v9.1] Knocking on Broadcaster's door:", joinCode.value);
     
-    conn.on("error", (err) => {
-      console.error("❌ [DATA] Error:", err);
+    // We stay in isConnecting state until the recall arrives or timeout
+    const timeout = setTimeout(() => {
+      if (appState.value !== STATES.RECEIVER_ACTIVE) {
+        isConnecting.value = false;
+        error.value = t('errors.conn_failed');
+      }
+    }, 10000);
+
+    knockCall.on("error", (err) => {
+      clearTimeout(timeout);
+      console.error("❌ [v9.1] Knock Call Error:", err);
+      error.value = t('errors.conn_failed');
+      isConnecting.value = false;
     });
   });
 
-    // 2. Wait for Broadcaster to call us with the stream
-    peer.on("call", (call) => {
-      activeReceiverCall.value = call;
-      // Answer with the local mic stream if active (Intercom)
-      call.answer(receiverMicStream.value || undefined); 
+  peer.on("call", (call) => {
+    console.log("📞 [v9.1] Incoming recall from Broadcaster. Answering...");
+    activeReceiverCall.value = call;
+    
+    // Switch to active UI state only when we know the Broadcaster is responding
+    appState.value = STATES.RECEIVER_ACTIVE;
+    isConnecting.value = false;
+
+    call.answer(receiverMicStream.value || undefined); 
+    
+    call.on("close", () => {
+      console.log("⛔ [v9.1] Media call closed. Resetting...");
+      resetApp();
+    });
+
+    call.on("stream", (rs) => {
+      console.log("📥 [v9.1] Received remote stream. ID:", rs.id);
       
-      call.on("stream", (rs) => {
-        console.log("📥 [RECEIVE-FIX] Incoming remote stream:", rs.id, "| Tracks:", rs.getTracks().length);
-        
-        const updateSplitStreams = () => {
-          const videoTracks = rs.getVideoTracks();
-          const audioTracks = rs.getAudioTracks();
-          
-          console.log(`📥 [RECEIVE-FIX] Refreshing tracks - Video: ${videoTracks.length}, Audio: ${audioTracks.length}`);
-          
-          if (videoTracks.length > 0) {
-            // Track 0 is Screen
-            // IMPORTANT: Create new MediaStream to ensure Vue reactivity & re-binding
-            screenStream.value = new MediaStream([videoTracks[0], ...audioTracks]);
-            console.log("📺 [RECEIVE-FIX] Screen Stream Ready:", videoTracks[0].label);
+      // Low-level ICE connection monitoring (most robust)
+      if (call.peerConnection) {
+        call.peerConnection.oniceconnectionstatechange = () => {
+          const state = call.peerConnection.iceConnectionState;
+          console.log("❄️ [v9.1] ICE Connection State:", state);
+          if (["disconnected", "failed", "closed"].includes(state)) {
+            console.log("🚨 [v9.1] Connection lost via ICE. Resetting...");
+            resetApp();
           }
-          
-          if (videoTracks.length > 1) {
-            // Track 1 is Camera
-            cameraStream.value = new MediaStream([videoTracks[1]]);
-            console.log("📷 [RECEIVE-FIX] Camera Stream Ready:", videoTracks[1].label);
-          } else {
-            cameraStream.value = null;
-          }
-           // Fallback for single stream: CLOBBER remoteStream to bypass Vue object identity check
-          remoteStream.value = new MediaStream(rs.getTracks());
         };
+      }
 
-        // Initial assignment
-        updateSplitStreams();
+      // Auto-exit ONLY if ALL tracks (audio & video) are ended
+      const checkAllTracksEnded = () => {
+        const liveTracks = rs.getTracks().filter(t => t.readyState === 'live');
+        console.log(`📊 [v9.1] Track Status Check: ${liveTracks.length} live tracks remaining`);
+        if (liveTracks.length === 0) {
+          console.log("📺 [v9.1] All remote tracks ended. Returning to home...");
+          resetApp();
+        }
+      };
 
-        // Critical: Handle late unmuting (common on iOS)
-        rs.getTracks().forEach(t => {
-          t.enabled = true;
-          t.onunmute = () => {
-            console.log(`✅ [RECEIVE-FIX] Track ${t.kind} unmuted, re-triggering stream update`);
-            updateSplitStreams();
-          };
-          if (t.readyState === 'ended') console.warn(`⚠️ [RECEIVE-FIX] track ${t.kind} arrived in 'ended' state`);
-        });
+      console.log(`📡 [v9.1] Attaching listeners to ${rs.getTracks().length} tracks`);
+      rs.getTracks().forEach(track => {
+        console.log(`🔗 [v9.1] Monitoring track: ${track.kind} (${track.id}) - State: ${track.readyState}`);
+        track.onended = () => {
+          console.log(`📺 [v9.1] Track ended (${track.kind}): ${track.id}`);
+          checkAllTracksEnded();
+        };
+      });
+      
+      const updateSplitStreams = () => {
+        if (!rs) return;
+        const videoTracks = rs.getVideoTracks();
+        const audioTracks = rs.getAudioTracks();
+        
+        if (videoTracks.length > 0) {
+          screenStream.value = new MediaStream([videoTracks[0], ...audioTracks]);
+        }
+        if (videoTracks.length > 1) {
+          cameraStream.value = new MediaStream([videoTracks[1]]);
+          console.log("📷 [v9.1] Multi-track detected: Secondary Video bound");
+        } else {
+          cameraStream.value = null;
+          remoteStream.value = new MediaStream(rs.getTracks());
+        }
+      };
+
+      updateSplitStreams();
+      setTimeout(updateSplitStreams, 500);
+      setTimeout(updateSplitStreams, 1500);
+      setTimeout(updateSplitStreams, 3000);
+
+      rs.getTracks().forEach(t => {
+        t.enabled = true;
+        if (t.kind === 'audio') console.log("🔊 [v9.1] Remote audio enabled");
       });
     });
+  });
 
   peer.on("error", (err) => {
     handlePeerError(err);
-    if (!showFirefoxGuide.value) {
-      joinCode.value = "";
-    }
+    if (!showFirefoxGuide.value) joinCode.value = "";
   });
 };
 
@@ -778,6 +789,22 @@ const resetApp = (forceLanding = false) => {
     }
   });
 
+  // Explicitly close active calls before destruction for v9.1 stability
+  if (activeReceiverCall.value) {
+    activeReceiverCall.value.close();
+    activeReceiverCall.value = null;
+  }
+  
+  // Explicitly close active calls before destruction for v9.1 stability
+  if (activeReceiverCall.value) {
+    try {
+      activeReceiverCall.value.close();
+    } catch (e) {
+      console.warn("Call close failed (likely already gone)", e);
+    }
+    activeReceiverCall.value = null;
+  }
+  
   if (peerInstance.value) {
     peerInstance.value.destroy();
     peerInstance.value = null;
@@ -1080,6 +1107,18 @@ const resetApp = (forceLanding = false) => {
                 </div>
               </div>
             </div>
+
+            <!-- v7: Receiver Info Display -->
+            <transition name="fade">
+              <div v-if="lastReceiverInfo" class="mt-8 pt-6 border-t border-slate-800/50 flex justify-center">
+                <div class="flex items-center gap-2 text-emerald-500 bg-emerald-400/5 px-6 py-2.5 rounded-2xl border border-emerald-500/20 shadow-sm shadow-emerald-500/5">
+                  <Smartphone class="w-4 h-4" />
+                  <span class="text-[10px] font-black uppercase tracking-[0.2em]">
+                    {{ $t('sender.receiver_connected') }}: {{ lastReceiverInfo }}
+                  </span>
+                </div>
+              </div>
+            </transition>
 
             <div class="grid gap-4 mb-8" :class="localScreenStream && localCameraStream ? 'grid-cols-2' : 'grid-cols-1'">
               <!-- Screen Preview -->
