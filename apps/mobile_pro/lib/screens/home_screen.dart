@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/constants.dart';
 import 'broadcast_screen.dart';
 import 'receive_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:in_app_review/in_app_review.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,6 +31,28 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       debugPrint('Error launching URL: $e');
+    }
+  }
+
+  Future<void> _checkAndRequestReview() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      int count = prefs.getInt('broadcast_completion_count') ?? 0;
+      count++;
+      await prefs.setInt('broadcast_completion_count', count);
+      
+      debugPrint('Broadcast completion count: $count');
+      
+      // Request review at specific milestones
+      if (count == 3 || count == 10 || count == 20) {
+        final InAppReview inAppReview = InAppReview.instance;
+        if (await inAppReview.isAvailable()) {
+          debugPrint('Requesting App Store Review...');
+          await inAppReview.requestReview();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error in review prompt logic: $e');
     }
   }
 
@@ -206,7 +230,10 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icons.wifi_tethering,
             color: kPrimaryColor,
             textColor: Colors.black,
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BroadcastScreen(isPro: _isPro))),
+            onTap: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => BroadcastScreen(isPro: _isPro)));
+              _checkAndRequestReview();
+            },
           ),
           const SizedBox(height: 16),
           _buildActionButton(
