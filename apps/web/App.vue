@@ -947,17 +947,9 @@ const resetApp = (forceLanding = false) => {
               <Download class="w-6 h-6" />
               {{ $t('landing.receive') }}
             </button>
-            <div class="flex flex-wrap gap-4 w-full max-w-sm mx-auto justify-center">
-              <a href="/castnow.apk" download
-                class="flex-1 min-w-[140px] h-11 bg-slate-900 border border-slate-800 rounded-xl hover:border-amber-500 transition-all flex items-center px-4 gap-3 group active:scale-95">
-                <Smartphone class="w-6 h-6 text-amber-500 group-hover:scale-110 transition-transform" />
-                <div class="flex flex-col items-start leading-none">
-                  <span class="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">Download for</span>
-                  <span class="text-xs font-black text-slate-100 uppercase tracking-tight">Android APK</span>
-                </div>
-              </a>
+            <div class="flex justify-center w-full">
               <a href="https://apps.apple.com/us/app/castnow-pro/id6761016081" target="_blank"
-                class="flex-1 min-w-[140px] h-11 bg-black border border-slate-800 rounded-xl hover:border-amber-500 transition-all flex items-center px-4 gap-3 group active:scale-95">
+                class="w-full max-w-[200px] h-11 bg-black border border-slate-800 rounded-xl hover:border-amber-500 transition-all flex items-center justify-center px-4 gap-3 group active:scale-95">
                 <Apple class="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
                 <div class="flex flex-col items-start leading-none">
                   <span class="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Download on the</span>
