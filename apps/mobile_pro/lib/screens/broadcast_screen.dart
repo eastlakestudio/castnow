@@ -8,7 +8,10 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:peerdart/peerdart.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:provider/provider.dart';
 import '../core/constants.dart';
+import '../core/subscription_service.dart';
+import '../widgets/paywall_dialog.dart';
 
 class BroadcastScreen extends StatefulWidget {
   final bool isPro;
@@ -121,6 +124,26 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     if (!_shareScreen && !_shareCamera) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select at least one video (Screen or Camera).")));
       return;
+    }
+
+    final isPro = context.read<SubscriptionService>().isSubscribed || widget.isPro;
+    if (!isPro) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(child: Text("Free Version: Streaming is limited to 3 minutes.", style: TextStyle(fontWeight: FontWeight.bold))),
+            ],
+          ),
+          backgroundColor: Colors.blueGrey.shade800,
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
     }
 
     setState(() => _isLoading = true);
@@ -406,7 +429,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
         }
       }, onError: (e) => debugPrint("❌ [v9.1] Call Listener Error: $e")));
 
-      if (!widget.isPro) {
+      if (!widget.isPro && !context.read<SubscriptionService>().isSubscribed) {
         _limitTimer?.cancel();
         _limitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
           if (!mounted) { timer.cancel(); return; }
@@ -490,8 +513,30 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
 
   void _showTimeUpDialog() {
     showDialog(context: context, barrierDismissible: false, builder: (ctx) => AlertDialog(
-      title: const Text("Time Limit"), content: const Text("Upgrade to Pro for unlimited streaming."),
-      actions: [ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK")), TextButton(onPressed: () => _stopBroadcast(), child: const Text("STOP"))],
+      backgroundColor: kSurfaceColor,
+      title: const Text("Time Limit Reached", style: TextStyle(color: Colors.cyanAccent)), 
+      content: const Text("Free streaming is limited to 3 minutes.\nUpgrade to PRO to continue this broadcast.", style: TextStyle(color: Colors.white70)),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            _stopBroadcast();
+          }, 
+          child: const Text("STOP", style: TextStyle(color: Colors.grey))
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent, foregroundColor: Colors.black),
+          onPressed: () {
+            Navigator.pop(ctx);
+            showDialog(context: context, builder: (_) => const PaywallDialog()).then((_) {
+               if (mounted && !context.read<SubscriptionService>().isSubscribed) {
+                 _stopBroadcast();
+               }
+            });
+          }, 
+          child: const Text("UPGRADE TO PRO", style: TextStyle(fontWeight: FontWeight.bold))
+        ),
+      ],
     ));
   }
 
@@ -625,6 +670,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
 
   @override
   Widget build(BuildContext context) {
+    final isPro = context.watch<SubscriptionService>().isSubscribed || widget.isPro;
+    if (isPro) {
+      _limitTimer?.cancel();
+    }
+
     if (_peerId == null && !_isLoading) {
       return Scaffold(
         backgroundColor: kBackgroundColor,
@@ -747,7 +797,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
               Icon(Icons.circle, color: _isConnected ? Colors.green : (_isScreenSharing ? Colors.blue : Colors.red), size: 8),
               const SizedBox(width: 8),
               Text(_isConnected ? "CONNECTED" : (_isScreenSharing ? "SHARING" : "ON AIR"), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              if (!widget.isPro) ...[
+              if (!isPro) ...[
                  const SizedBox(width: 8),
                  Text("${(_remainingSeconds ~/ 60)}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}", style: const TextStyle(fontSize: 12)),
               ]

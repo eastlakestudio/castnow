@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'core/constants.dart';
+import 'core/subscription_service.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const CastNowApp());
+  final subscriptionService = SubscriptionService();
+  await subscriptionService.init();
+
+  runApp(
+    ChangeNotifierProvider.value(
+      value: subscriptionService,
+      child: const CastNowApp(),
+    ),
+  );
 }
 
 class CastNowApp extends StatelessWidget {

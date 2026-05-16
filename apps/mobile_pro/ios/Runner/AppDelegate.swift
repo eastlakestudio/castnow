@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import ReplayKit
+import StoreKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -25,6 +26,33 @@ import ReplayKit
             } else if call.method == "hidePicker" {
                 BroadcastPickerManager.shared.hidePicker()
                 result(true)
+            } else {
+                result(FlutterMethodNotImplemented)
+            }
+        }
+    }
+
+    if let registrar = self.registrar(forPlugin: "SubscriptionPlugin") {
+        let subscriptionChannel = FlutterMethodChannel(name: "subscription_utils", binaryMessenger: registrar.messenger())
+        subscriptionChannel.setMethodCallHandler { (call, result) in
+            if call.method == "getOriginalAppVersion" {
+                if #available(iOS 16.0, *) {
+                    Task {
+                        do {
+                            let verificationResult = try await StoreKit.AppTransaction.shared
+                            switch verificationResult {
+                            case .verified(let appTransaction):
+                                DispatchQueue.main.async { result(appTransaction.originalAppVersion) }
+                            case .unverified(_, _):
+                                DispatchQueue.main.async { result(nil) }
+                            }
+                        } catch {
+                            DispatchQueue.main.async { result(nil) }
+                        }
+                    }
+                } else {
+                    result(nil)
+                }
             } else {
                 result(FlutterMethodNotImplemented)
             }

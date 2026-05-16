@@ -6,6 +6,9 @@ import 'broadcast_screen.dart';
 import 'receive_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:in_app_review/in_app_review.dart';
+import 'package:provider/provider.dart';
+import '../core/subscription_service.dart';
+import '../widgets/paywall_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,7 +18,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final bool _isPro = true;
 
   Future<void> _launchURL(String url) async {
     try {
@@ -90,6 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isPro = context.watch<SubscriptionService>().isSubscribed;
     final orientation = MediaQuery.of(context).orientation;
     final isLandscape = orientation == Orientation.landscape;
 
@@ -147,20 +150,27 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Icon(Icons.bolt_rounded,
                   color: kPrimaryColor, size: isLandscape ? 36 : 48),
             ),
-            const Positioned(
+            Positioned(
               top: -2,
               left: -2,
-              child: Text(
-                "PRO",
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.cyanAccent,
-                  letterSpacing: 0.5,
-                  shadows: [
-                    Shadow(color: Colors.cyanAccent, blurRadius: 4),
-                    Shadow(color: Colors.cyanAccent, blurRadius: 10),
-                  ],
+              child: GestureDetector(
+                onTap: () {
+                  if (!isPro) {
+                    showDialog(context: context, builder: (_) => const PaywallDialog());
+                  }
+                },
+                child: Text(
+                  isPro ? "PRO" : "FREE",
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: isPro ? Colors.cyanAccent : Colors.grey,
+                    letterSpacing: 0.5,
+                    shadows: isPro ? const [
+                      Shadow(color: Colors.cyanAccent, blurRadius: 4),
+                      Shadow(color: Colors.cyanAccent, blurRadius: 10),
+                    ] : [],
+                  ),
                 ),
               ),
             ),
@@ -168,12 +178,13 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         SizedBox(height: isLandscape ? 8 : 20),
         RichText(
-          text: const TextSpan(
-            style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900),
+          text: TextSpan(
+            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900),
             children: [
-              TextSpan(text: 'Cast'),
-              TextSpan(text: 'Now', style: TextStyle(color: kPrimaryColor)),
-              TextSpan(text: ' Pro', style: TextStyle(fontSize: 24, color: Colors.cyanAccent)),
+              const TextSpan(text: 'Cast'),
+              const TextSpan(text: 'Now', style: TextStyle(color: kPrimaryColor)),
+              if (isPro)
+                const TextSpan(text: ' Pro', style: TextStyle(fontSize: 24, color: Colors.cyanAccent)),
             ],
           ),
         ),
@@ -231,7 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
             color: kPrimaryColor,
             textColor: Colors.black,
             onTap: () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => BroadcastScreen(isPro: _isPro)));
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => BroadcastScreen(isPro: isPro)));
               _checkAndRequestReview();
             },
           ),
