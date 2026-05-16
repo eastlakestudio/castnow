@@ -97,7 +97,6 @@ class SubscriptionService extends ChangeNotifier {
 
     // 2. Legacy user migration (StoreKit App Transaction for iOS Paid App purchasers)
     bool isLegacyBuyer = false;
-    /* Temporarily disabled for testing
     try {
       if (Platform.isIOS) {
         final String? originalVersion = await _platform.invokeMethod<String>('getOriginalAppVersion');
@@ -123,7 +122,6 @@ class SubscriptionService extends ChangeNotifier {
     if (!isLegacyBuyer && prefs.containsKey('broadcast_completion_count')) {
       isLegacyBuyer = true;
     }
-    */
 
     if (isLegacyBuyer) {
       debugPrint('Legacy user detected. Upgrading to PRO automatically.');
