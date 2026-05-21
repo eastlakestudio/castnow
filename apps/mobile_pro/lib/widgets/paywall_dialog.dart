@@ -10,6 +10,15 @@ class PaywallDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final subService = context.watch<SubscriptionService>();
     final isLoading = subService.isPurchasing;
+    final isSubscribed = subService.isSubscribed;
+
+    if (isSubscribed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      });
+    }
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -28,87 +37,137 @@ class PaywallDialog extends StatelessWidget {
             )
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.bolt_rounded, color: Colors.cyanAccent, size: 48),
-            const SizedBox(height: 16),
-            const Text(
-              "Upgrade to PRO",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              "Unlock unlimited P2P casting",
-              style: TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-            const SizedBox(height: 32),
-            _buildFeatureRow(Icons.timer_off_rounded, "Unlimited Casting Time"),
-            _buildFeatureRow(Icons.hd_rounded, "HD Video Quality"),
-            _buildFeatureRow(Icons.mic_rounded, "Crystal Clear Audio"),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: isLoading ? null : () => subService.buyYearlySubscription(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.cyanAccent,
-                  foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.bolt_rounded, color: Colors.cyanAccent, size: 48),
+              const SizedBox(height: 16),
+              const Text(
+                "Upgrade to PRO",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.2,
                 ),
-                child: isLoading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.black,
-                          strokeWidth: 2,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                "Unlock unlimited P2P casting",
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 32),
+              _buildFeatureRow(Icons.timer_off_rounded, "Unlimited Casting Time"),
+              _buildFeatureRow(Icons.hd_rounded, "HD Video Quality"),
+              _buildFeatureRow(Icons.mic_rounded, "Crystal Clear Audio"),
+              // Plan Duration details
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Annual Access",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      )
-                    : Text(
-                        subService.products.isNotEmpty 
-                            ? "Subscribe Now - ${subService.products.first.price}/year" 
-                            : "Subscribe Now",
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                        SizedBox(height: 4),
+                        Text(
+                          "Billed yearly, cancel anytime",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
                         ),
+                      ],
+                    ),
+                    Text(
+                      subService.annualPackage != null 
+                          ? "${subService.annualPackage!.storeProduct.priceString}/yr" 
+                          : (subService.localStoreProduct != null
+                              ? "${subService.localStoreProduct!.priceString}/yr"
+                              : "\$2.99/yr"),
+                      style: const TextStyle(
+                        color: Colors.cyanAccent,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
                       ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: isLoading ? null : () => subService.restorePurchases(),
-              child: Text(
-                "Restore Purchases",
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 12,
-                  decoration: TextDecoration.underline,
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: isLoading ? null : () => Navigator.pop(context),
-              child: Text(
-                "Maybe Later",
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 14,
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.cyanAccent,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 8,
+                    shadowColor: Colors.cyanAccent.withOpacity(0.4),
+                  ),
+                  onPressed: isLoading
+                      ? null
+                      : () => subService.buyYearlySubscription(),
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.black,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : const Text(
+                          "Subscribe Now",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
               ),
-            )
-          ],
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: isLoading ? null : () => subService.restorePurchases(),
+                child: Text(
+                  "Restore Purchases",
+                  style: TextStyle(
+                    color: Colors.cyanAccent.withOpacity(0.8),
+                    fontSize: 14,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: isLoading ? null : () => Navigator.pop(context),
+                child: Text(
+                  "Maybe Later",
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 14,
+                  ),
+                ),
+              )
+            ],
+          ),
         ),
       ),
     );

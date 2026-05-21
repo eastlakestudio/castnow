@@ -126,55 +126,78 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              width: isLandscape ? 60 : 80,
-              height: isLandscape ? 60 : 80,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1E293B), Color(0xFF020617)],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+        GestureDetector(
+          onTap: () {
+            if (!isPro) {
+              showDialog(context: context, builder: (_) => const PaywallDialog());
+            }
+          },
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: isLandscape ? 60 : 80,
+                height: isLandscape ? 60 : 80,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1E293B), Color(0xFF020617)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  borderRadius: BorderRadius.circular(isLandscape ? 18 : 24),
+                  border: Border.all(color: Colors.white10),
+                  boxShadow: [
+                    BoxShadow(
+                        color: kPrimaryColor.withOpacity(0.1),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10))
+                  ],
                 ),
-                borderRadius: BorderRadius.circular(isLandscape ? 18 : 24),
-                border: Border.all(color: Colors.white10),
-                boxShadow: [
-                  BoxShadow(
-                      color: kPrimaryColor.withOpacity(0.1),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10))
-                ],
+                child: Icon(Icons.bolt_rounded,
+                    color: kPrimaryColor, size: isLandscape ? 36 : 48),
               ),
-              child: Icon(Icons.bolt_rounded,
-                  color: kPrimaryColor, size: isLandscape ? 36 : 48),
-            ),
-            Positioned(
-              top: -2,
-              left: -2,
-              child: GestureDetector(
-                onTap: () {
-                  if (!isPro) {
-                    showDialog(context: context, builder: (_) => const PaywallDialog());
-                  }
-                },
-                child: Text(
-                  isPro ? "PRO" : "FREE",
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    color: isPro ? Colors.cyanAccent : Colors.grey,
-                    letterSpacing: 0.5,
-                    shadows: isPro ? const [
-                      Shadow(color: Colors.cyanAccent, blurRadius: 4),
-                      Shadow(color: Colors.cyanAccent, blurRadius: 10),
-                    ] : [],
+              Positioned(
+                top: -8,
+                left: -16,
+                child: GestureDetector(
+                  onTap: () {
+                    if (!isPro) {
+                      showDialog(context: context, builder: (_) => const PaywallDialog());
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      gradient: isPro
+                          ? const LinearGradient(
+                              colors: [Colors.cyan, Colors.blueAccent],
+                            )
+                          : const LinearGradient(
+                              colors: [Colors.orangeAccent, Colors.redAccent],
+                            ),
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (isPro ? Colors.cyan : Colors.orangeAccent).withOpacity(0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      isPro ? "PRO" : "GET PRO",
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         SizedBox(height: isLandscape ? 8 : 20),
         RichText(
@@ -296,7 +319,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ],
                             ),
                         const SizedBox(height: 48),
-                        _buildFooter(),
+                        _buildFooter(isPro),
                         const SizedBox(height: 20),
                       ],
                     ),
@@ -380,7 +403,113 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildFooter() {
+  Widget _buildUpgradeCard(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.indigo.shade900.withOpacity(0.8),
+            kSurfaceColor.withOpacity(0.6),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.cyanAccent.withOpacity(0.3), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.cyanAccent.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              showDialog(context: context, builder: (_) => const PaywallDialog());
+            },
+            borderRadius: BorderRadius.circular(24),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.cyanAccent.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.cyanAccent.withOpacity(0.2),
+                          blurRadius: 10,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.bolt_rounded, color: Colors.cyanAccent, size: 28),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Upgrade to CastNow Pro",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Unlock unlimited broadcast & remove limits.",
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.7),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.cyanAccent,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.cyanAccent.withOpacity(0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Text(
+                      "Get Pro",
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFooter(bool isPro) {
     return Column(
       children: [
         const Text("CastNow P2P Engine v2.5",
@@ -393,6 +522,32 @@ class _HomeScreenState extends State<HomeScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            if (!isPro) ...[
+              _buildFooterLink("RESTORE", () async {
+                try {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Restoring purchases..."), duration: Duration(seconds: 1)),
+                  );
+                  await context.read<SubscriptionService>().restorePurchases();
+                  final isNowPro = context.read<SubscriptionService>().isSubscribed;
+                  if (isNowPro) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Subscription successfully restored!"), backgroundColor: Colors.green),
+                    );
+                  } else {
+                    final error = context.read<SubscriptionService>().errorMessage;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(error ?? "No active subscription found to restore."), backgroundColor: Colors.redAccent),
+                    );
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Failed to restore: $e"), backgroundColor: Colors.redAccent),
+                  );
+                }
+              }),
+              _buildFooterSeparator(),
+            ],
             _buildFooterLink("TERMS", () => _showInfoDialog(context, "Terms of Use", "Free for personal use. CastNow Pro license required for commercial redistribution.")),
             _buildFooterSeparator(),
             _buildFooterLink("PRIVACY", () => _showInfoDialog(context, "Privacy Policy", "P2P connection is direct. No media data is stored on our servers.")),

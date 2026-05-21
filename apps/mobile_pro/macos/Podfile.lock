@@ -3,14 +3,23 @@ PODS:
     - FlutterMacOS
     - WebRTC-SDK (= 125.6422.06)
   - FlutterMacOS (1.0.0)
+  - purchases_flutter (8.11.0):
+    - FlutterMacOS
+    - PurchasesHybridCommon (= 14.3.0)
+  - PurchasesHybridCommon (14.3.0):
+    - RevenueCat (= 5.32.0)
+  - RevenueCat (5.32.0)
   - WebRTC-SDK (125.6422.06)
 
 DEPENDENCIES:
   - flutter_webrtc (from `Flutter/ephemeral/.symlinks/plugins/flutter_webrtc/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
+  - purchases_flutter (from `Flutter/ephemeral/.symlinks/plugins/purchases_flutter/macos`)
 
 SPEC REPOS:
   trunk:
+    - PurchasesHybridCommon
+    - RevenueCat
     - WebRTC-SDK
 
 EXTERNAL SOURCES:
@@ -18,10 +27,15 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/flutter_webrtc/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
+  purchases_flutter:
+    :path: Flutter/ephemeral/.symlinks/plugins/purchases_flutter/macos
 
 SPEC CHECKSUMS:
   flutter_webrtc: 377dbcebdde6fed0fc40de87bcaaa2bffcec9a88
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  purchases_flutter: 7835f4491185946188319847e425ef71ac492971
+  PurchasesHybridCommon: 7f0944cc5411bdcd1ea5d69affa6a6f9aaf87b13
+  RevenueCat: 7e1d0768fb287c9983173c9b28e39ccbeeb828a9
   WebRTC-SDK: 79942c006ea64f6fb48d7da8a4786dfc820bc1db
 
 PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009

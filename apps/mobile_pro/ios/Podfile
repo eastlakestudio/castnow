@@ -48,9 +48,4 @@ post_install do |installer|
   end
 end
 
-target 'BroadcastExtension' do
-  use_frameworks!
-  use_modular_headers!
-  # If you need specific pods for the extension, add them here
-  # flutter_webrtc often requires pointing to the specific pod logic if not standard
-end
+
