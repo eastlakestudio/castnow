@@ -1,10 +1,69 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 import '../core/constants.dart';
 import '../core/subscription_service.dart';
 
-class PaywallDialog extends StatelessWidget {
+class PaywallDialog extends StatefulWidget {
   const PaywallDialog({super.key});
+
+  @override
+  State<PaywallDialog> createState() => _PaywallDialogState();
+}
+
+class _PaywallDialogState extends State<PaywallDialog> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _trackImpression();
+    });
+  }
+
+  Future<void> _trackImpression() async {
+    final subService = context.read<SubscriptionService>();
+    final offeringId = subService.annualPackage?.offeringIdentifier;
+    
+    if (offeringId != null) {
+      try {
+        // 使用 10.x SDK 官方最新的 Dart 接口直接上报自定义付费墙曝光
+        await Purchases.trackCustomPaywallImpression(
+          params: CustomPaywallImpressionParams(
+            offeringId: offeringId,
+          ),
+        );
+        debugPrint("[PaywallDialog] Showed custom paywall & tracked impression via Dart API: $offeringId");
+      } catch (e) {
+        debugPrint("[PaywallDialog] Failed to track custom paywall impression: $e");
+      }
+    } else {
+      debugPrint("[PaywallDialog] No offeringIdentifier available.");
+    }
+  }
+
+  void _showInfoDialog(BuildContext context, String title, String content) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: kSurfaceColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(title,
+            style: const TextStyle(
+                color: kPrimaryColor, fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+            child:
+                SelectableText(content, style: const TextStyle(color: kTextSecondary))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CLOSE",
+                style: TextStyle(
+                    color: kPrimaryColor, fontWeight: FontWeight.bold)),
+          )
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -165,6 +224,21 @@ class PaywallDialog extends StatelessWidget {
                     fontSize: 14,
                   ),
                 ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  GestureDetector(
+                    onTap: () => _showInfoDialog(context, "Terms of Use", "Free for personal use. CastNow Pro license required for commercial redistribution."),
+                    child: Text("Terms of Use", style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, decoration: TextDecoration.underline, decorationColor: Colors.white.withOpacity(0.4))),
+                  ),
+                  Text("  and  ", style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10)),
+                  GestureDetector(
+                    onTap: () => _showInfoDialog(context, "Privacy Policy", "P2P connection is direct. No media data is stored on our servers."),
+                    child: Text("Privacy Policy", style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, decoration: TextDecoration.underline, decorationColor: Colors.white.withOpacity(0.4))),
+                  ),
+                ],
               )
             ],
           ),

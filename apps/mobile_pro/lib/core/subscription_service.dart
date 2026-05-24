@@ -41,8 +41,6 @@ class SubscriptionService extends ChangeNotifier {
   StoreProduct? get localStoreProduct => _localStoreProduct;
   String? get errorMessage => _errorMessage;
 
-  static const MethodChannel _platform = MethodChannel('subscription_utils');
-
   Future<void> init() async {
     // 1. Load cached status immediately to unblock app logic
     await _loadCachedSubscriptionStatus();
@@ -160,31 +158,7 @@ class SubscriptionService extends ChangeNotifier {
       return;
     }
 
-    // Legacy user migration check
-    bool isLegacyBuyer = false;
-    try {
-      if (_isIOS) {
-        final String? originalVersion = await _platform.invokeMethod<String>('getOriginalAppVersion');
-        if (originalVersion != null) {
-          isLegacyBuyer = isVersionLegacy(originalVersion);
-        }
-      }
-    } catch (e) {
-      debugPrint('Failed to get original app version: $e');
-    }
-
-    if (!isLegacyBuyer && prefs.containsKey('broadcast_completion_count')) {
-      isLegacyBuyer = true;
-    }
-
-    if (isLegacyBuyer) {
-      debugPrint('Legacy user detected. Upgrading to PRO automatically and flagging as legacy.');
-      await prefs.setBool(_prefIsLegacyUserKey, true);
-      await _setSubscribed(true);
-    } else {
-      _isSubscribed = false;
-    }
-    
+    _isSubscribed = false;
     notifyListeners();
   }
 
@@ -224,9 +198,27 @@ class SubscriptionService extends ChangeNotifier {
       debugPrint("[SubscriptionService] Entitlement: '$key', isActive: ${entitlementInfo.isActive}, productIdentifier: ${entitlementInfo.productIdentifier}");
     });
 
-    bool isPremiumActive = (entitlements["pro"]?.isActive == true) || 
-                          (entitlements["com.screenshare.castnow.vip.year"]?.isActive == true);
-    debugPrint("[SubscriptionService] isPremiumActive evaluation: $isPremiumActive (checked 'pro' and 'com.screenshare.castnow.vip.year')");
+    bool isPremiumActive = false;
+    // 支持用户指定的所有四种产品/权益 ID 的检测
+    final activeEntitlementKeys = ["pro", "com.screenshare.castnow.vip.year", "lifetime", "yearly", "monthly"];
+    for (var key in activeEntitlementKeys) {
+      if (entitlements[key]?.isActive == true) {
+        isPremiumActive = true;
+        debugPrint("[SubscriptionService] Premium is active via entitlement: $key");
+        break;
+      }
+    }
+
+    // 2. 检查 iOS 上的原始购买版本（Legacy 升级逻辑 - 纯 Dart 无 MethodChannel 方案）
+    if (!isPremiumActive && customerInfo.originalApplicationVersion != null) {
+      final originalVersion = customerInfo.originalApplicationVersion!;
+      if (isVersionLegacy(originalVersion)) {
+        isPremiumActive = true;
+        debugPrint("[SubscriptionService] Legacy user detected via originalApplicationVersion: $originalVersion. Upgrading to PRO.");
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_prefIsLegacyUserKey, true);
+      }
+    }
     
     if (isPremiumActive) {
       debugPrint("[SubscriptionService] Setting subscription status to TRUE.");
@@ -242,11 +234,6 @@ class SubscriptionService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_prefIsLegacyUserKey) == true) {
       // It's a legacy user, keep them subscribed
-      return;
-    }
-    if (prefs.containsKey('broadcast_completion_count')) {
-      // It's a legacy user based on heuristic, flag them and keep them subscribed
-      await prefs.setBool(_prefIsLegacyUserKey, true);
       return;
     }
     await _setSubscribed(false);
@@ -273,9 +260,9 @@ class SubscriptionService extends ChangeNotifier {
       if (_localStoreProduct != null) {
         debugPrint('[SubscriptionService] Purchasing via local StoreProduct directly from StoreKit: ${_localStoreProduct!.identifier}');
         try {
-          CustomerInfo customerInfo = await Purchases.purchaseStoreProduct(_localStoreProduct!);
-          debugPrint('[SubscriptionService] purchaseStoreProduct call returned CustomerInfo.');
-          await _updateSubscriptionStatus(customerInfo);
+          PurchaseResult purchaseResult = await Purchases.purchaseStoreProduct(_localStoreProduct!);
+          debugPrint('[SubscriptionService] purchaseStoreProduct call returned PurchaseResult.');
+          await _updateSubscriptionStatus(purchaseResult.customerInfo);
           debugPrint('[SubscriptionService] Successfully purchased local StoreProduct.');
         } on PlatformException catch (e) {
           var errorCode = PurchasesErrorHelper.getErrorCode(e);
@@ -304,9 +291,9 @@ class SubscriptionService extends ChangeNotifier {
     
     try {
       debugPrint('[SubscriptionService] Purchasing RevenueCat package: ${packageToBuy.identifier}');
-      CustomerInfo customerInfo = await Purchases.purchasePackage(packageToBuy);
-      debugPrint('[SubscriptionService] purchasePackage call returned CustomerInfo.');
-      await _updateSubscriptionStatus(customerInfo);
+      PurchaseResult purchaseResult = await Purchases.purchasePackage(packageToBuy);
+      debugPrint('[SubscriptionService] purchasePackage call returned PurchaseResult.');
+      await _updateSubscriptionStatus(purchaseResult.customerInfo);
       debugPrint('[SubscriptionService] Successfully purchased package.');
     } on PlatformException catch (e) {
       var errorCode = PurchasesErrorHelper.getErrorCode(e);

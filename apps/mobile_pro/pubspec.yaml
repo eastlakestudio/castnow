@@ -2,7 +2,7 @@
 name: castnow_pro
 description: "CastNow Pro - Unlimited P2P Screen Sharing"
 publish_to: 'none'
-version: 3.0.1+16
+version: 3.1.1+18
 
 environment:
   sdk: '>=3.2.3 <4.0.0'
@@ -26,8 +26,9 @@ dependencies:
   device_info_plus: ^12.3.0
   package_info_plus: ^9.0.0
   in_app_review: ^2.0.9
-  purchases_flutter: ^8.1.1
+  purchases_flutter: ^10.1.1
   provider: ^6.1.5+1
+  purchases_ui_flutter: ^10.1.1
 
 dev_dependencies:
   flutter_test:

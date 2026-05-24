@@ -7,6 +7,7 @@ import 'receive_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:provider/provider.dart';
+import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 import '../core/subscription_service.dart';
 import '../widgets/paywall_dialog.dart';
 
@@ -522,28 +523,12 @@ class _HomeScreenState extends State<HomeScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (!isPro) ...[
-              _buildFooterLink("RESTORE", () async {
+            if (isPro) ...[
+              _buildFooterLink("MANAGE", () async {
                 try {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Restoring purchases..."), duration: Duration(seconds: 1)),
-                  );
-                  await context.read<SubscriptionService>().restorePurchases();
-                  final isNowPro = context.read<SubscriptionService>().isSubscribed;
-                  if (isNowPro) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Subscription successfully restored!"), backgroundColor: Colors.green),
-                    );
-                  } else {
-                    final error = context.read<SubscriptionService>().errorMessage;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(error ?? "No active subscription found to restore."), backgroundColor: Colors.redAccent),
-                    );
-                  }
+                  await RevenueCatUI.presentCustomerCenter();
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Failed to restore: $e"), backgroundColor: Colors.redAccent),
-                  );
+                  debugPrint("Failed to show customer center: $e");
                 }
               }),
               _buildFooterSeparator(),
@@ -552,7 +537,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildFooterSeparator(),
             _buildFooterLink("PRIVACY", () => _showInfoDialog(context, "Privacy Policy", "P2P connection is direct. No media data is stored on our servers.")),
             _buildFooterSeparator(),
-            _buildFooterLink("HELP", () => _launchURL("mailto:minghua.liu@eastlakestudio.com")),
+            _buildFooterLink("HELP", () => _launchURL("mailto:mingh.liu@gmail.com")),
           ],
         ),
       ],

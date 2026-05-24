@@ -33,6 +33,7 @@ void main() {
       'requestDate': '2023-01-01T00:00:00Z',
       'originalPurchaseDate': null,
       'managementURL': null,
+      'originalApplicationVersion': '15',
     };
     
     // Mock the platform channels
@@ -117,12 +118,7 @@ void main() {
   test('iOS legacy user (build < 15) is migrated and keeps PRO', () async {
     SubscriptionService.debugForceIOS = true;
     
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(subUtilsChannel, (MethodCall methodCall) async {
-      if (methodCall.method == 'getOriginalAppVersion') {
-        return '10'; // build number < 15
-      }
-      return null;
-    });
+    mockCustomerInfo['originalApplicationVersion'] = '10'; // build number < 15
 
     final service = SubscriptionService();
     await service.init();
@@ -130,18 +126,6 @@ void main() {
     expect(service.isSubscribed, isTrue);
 
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool('is_legacy_user'), isTrue);
-  });
-
-  test('Android legacy user (broadcast_completion_count exists) is migrated and keeps PRO', () async {
-    SubscriptionService.debugForceIOS = true;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('broadcast_completion_count', 5);
-
-    final service = SubscriptionService();
-    await service.init();
-
-    expect(service.isSubscribed, isTrue);
     expect(prefs.getBool('is_legacy_user'), isTrue);
   });
 
