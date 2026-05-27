@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../core/constants.dart';
 import '../core/subscription_service.dart';
 
@@ -135,7 +136,7 @@ class _PaywallDialogState extends State<PaywallDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Annual Access",
+                          "CastNow VIP - 1 Year",
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -144,7 +145,7 @@ class _PaywallDialogState extends State<PaywallDialog> {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          "Billed yearly, cancel anytime",
+                          "1 Year (Auto-Renewable)\nBilled yearly, cancel anytime",
                           style: TextStyle(
                             color: Colors.white70,
                             fontSize: 12,
@@ -230,12 +231,30 @@ class _PaywallDialogState extends State<PaywallDialog> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   GestureDetector(
-                    onTap: () => _showInfoDialog(context, "Terms of Use", "Free for personal use. CastNow Pro license required for commercial redistribution."),
-                    child: Text("Terms of Use", style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, decoration: TextDecoration.underline, decorationColor: Colors.white.withOpacity(0.4))),
+                    onTap: () async {
+                      try {
+                        final Uri uri = Uri.parse("https://castnow.vercel.app/terms.html");
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      } catch (e) {
+                        debugPrint("Error launching terms EULA: $e");
+                      }
+                    },
+                    child: Text("Terms of Use (EULA)", style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, decoration: TextDecoration.underline, decorationColor: Colors.white.withOpacity(0.4))),
                   ),
                   Text("  and  ", style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10)),
                   GestureDetector(
-                    onTap: () => _showInfoDialog(context, "Privacy Policy", "P2P connection is direct. No media data is stored on our servers."),
+                    onTap: () async {
+                      try {
+                        final Uri uri = Uri.parse("https://castnow.vercel.app/privacy.html");
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      } catch (e) {
+                        debugPrint("Error launching privacy: $e");
+                      }
+                    },
                     child: Text("Privacy Policy", style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, decoration: TextDecoration.underline, decorationColor: Colors.white.withOpacity(0.4))),
                   ),
                 ],

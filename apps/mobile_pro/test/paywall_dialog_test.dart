@@ -187,4 +187,25 @@ void main() {
     // The dialog should have popped itself
     expect(find.byType(PaywallDialog), findsNothing);
   });
+
+  testWidgets('PaywallDialog displays subscription terms and privacy links', (WidgetTester tester) async {
+    final mockService = MockSubscriptionService();
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<SubscriptionService>.value(
+        value: mockService,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: PaywallDialog(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('CastNow VIP - 1 Year'), findsOneWidget);
+    expect(find.text('Terms of Use (EULA)'), findsOneWidget);
+    expect(find.text('Privacy Policy'), findsOneWidget);
+  });
 }

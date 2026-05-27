@@ -30,5 +30,5 @@ void main() {
 // Helper to allow verify on setters/methods if needed
 class MockMediaStreamTrackLegacy extends Mock implements MediaStreamTrack {
   @override
-  set enabled(bool? _enabled) => super.noSuchMethod(Invocation.setter(#enabled, _enabled));
+  set enabled(bool? enabled) => super.noSuchMethod(Invocation.setter(#enabled, enabled));
 }
