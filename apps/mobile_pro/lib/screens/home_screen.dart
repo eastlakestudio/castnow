@@ -133,82 +133,35 @@ class _HomeScreenState extends State<HomeScreen> {
               showDialog(context: context, builder: (_) => const PaywallDialog());
             }
           },
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: isLandscape ? 60 : 80,
-                height: isLandscape ? 60 : 80,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF1E293B), Color(0xFF020617)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  borderRadius: BorderRadius.circular(isLandscape ? 18 : 24),
-                  border: Border.all(color: Colors.white10),
-                  boxShadow: [
-                    BoxShadow(
-                        color: kPrimaryColor.withOpacity(0.1),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10))
-                  ],
-                ),
-                child: Icon(Icons.bolt_rounded,
-                    color: kPrimaryColor, size: isLandscape ? 36 : 48),
+          child: Container(
+            width: isLandscape ? 60 : 80,
+            height: isLandscape ? 60 : 80,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1E293B), Color(0xFF020617)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
               ),
-              Positioned(
-                top: -8,
-                left: -16,
-                child: GestureDetector(
-                  onTap: () {
-                    if (!isPro) {
-                      showDialog(context: context, builder: (_) => const PaywallDialog());
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      gradient: isPro
-                          ? const LinearGradient(
-                              colors: [Colors.cyan, Colors.blueAccent],
-                            )
-                          : const LinearGradient(
-                              colors: [Colors.orangeAccent, Colors.redAccent],
-                            ),
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: (isPro ? Colors.cyan : Colors.orangeAccent).withOpacity(0.4),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      isPro ? "PRO" : "GET PRO",
-                      style: const TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+              borderRadius: BorderRadius.circular(isLandscape ? 18 : 24),
+              border: Border.all(color: Colors.white10),
+              boxShadow: [
+                BoxShadow(
+                    color: kPrimaryColor.withOpacity(0.1),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10))
+              ],
+            ),
+            child: Icon(Icons.bolt_rounded,
+                color: kPrimaryColor, size: isLandscape ? 36 : 48),
           ),
         ),
         SizedBox(height: isLandscape ? 8 : 20),
         RichText(
-          text: TextSpan(
-            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900),
+          text: const TextSpan(
+            style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900),
             children: [
-              const TextSpan(text: 'Cast'),
-              const TextSpan(text: 'Now', style: TextStyle(color: kPrimaryColor)),
-              if (isPro)
-                const TextSpan(text: ' Pro', style: TextStyle(fontSize: 24, color: Colors.cyanAccent)),
+              TextSpan(text: 'cast', style: TextStyle(color: Colors.white)),
+              TextSpan(text: 'now', style: TextStyle(color: kPrimaryColor)),
             ],
           ),
         ),
@@ -217,37 +170,40 @@ class _HomeScreenState extends State<HomeScreen> {
           margin: const EdgeInsets.only(top: 12),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.cyanAccent.withOpacity(0.08),
+            color: kPrimaryColor.withOpacity(0.08),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.cyanAccent.withOpacity(0.2)),
+            border: Border.all(color: kPrimaryColor.withOpacity(0.2)),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.language_rounded, color: Colors.cyanAccent, size: 16),
-              const SizedBox(width: 8),
-              const Text(
-                "Receive on: ",
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              GestureDetector(
-                onTap: () => _launchURL("https://castnow.vercel.app"),
-                child: const Text(
-                  "castnow.vercel.app",
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.language_rounded, color: kPrimaryColor, size: 16),
+                const SizedBox(width: 8),
+                const Text(
+                  "Receive on: ",
                   style: TextStyle(
-                    color: Colors.cyanAccent,
+                    color: Colors.white70,
                     fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    decoration: TextDecoration.underline,
-                    decorationColor: Colors.cyanAccent,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
-            ],
+                GestureDetector(
+                  onTap: () => _launchURL("https://castnow.vercel.app"),
+                  child: const Text(
+                    "castnow.vercel.app",
+                    style: TextStyle(
+                      color: kPrimaryColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.underline,
+                      decorationColor: kPrimaryColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -287,48 +243,109 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth > 700;
-            final horizontalPadding = isWide ? 40.0 : 24.0;
-            
-            return Center(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: EdgeInsets.all(horizontalPadding),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1000),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SizedBox(height: 20),
-                        isWide 
-                          ? Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Expanded(child: brandSection),
-                                Container(width: 1, height: 180, color: Colors.white10, margin: const EdgeInsets.symmetric(horizontal: 40)),
-                                Expanded(child: actionsSection),
-                              ],
-                            )
-                          : Column(
-                              children: [
-                                brandSection,
-                                const SizedBox(height: 48),
-                                actionsSection,
-                              ],
-                            ),
-                        const SizedBox(height: 48),
-                        _buildFooter(isPro),
-                        const SizedBox(height: 20),
-                      ],
+        child: Stack(
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 700;
+                final horizontalPadding = isWide ? 40.0 : 24.0;
+                
+                return Center(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: EdgeInsets.all(horizontalPadding),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1000),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(height: 20),
+                            isWide 
+                              ? Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Expanded(child: brandSection),
+                                    Container(width: 1, height: 180, color: Colors.white10, margin: const EdgeInsets.symmetric(horizontal: 40)),
+                                    Expanded(child: actionsSection),
+                                  ],
+                                )
+                              : Column(
+                                  children: [
+                                    brandSection,
+                                    const SizedBox(height: 48),
+                                    actionsSection,
+                                  ],
+                                ),
+                            const SizedBox(height: 48),
+                            _buildFooter(isPro),
+                            const SizedBox(height: 20),
+                          ],
+                        ),
+                      ),
                     ),
+                  ),
+                );
+              },
+            ),
+            Positioned(
+              top: 16,
+              left: 16,
+              child: GestureDetector(
+                onTap: () {
+                  if (!isPro) {
+                    showDialog(context: context, builder: (_) => const PaywallDialog());
+                  } else {
+                    try {
+                      RevenueCatUI.presentCustomerCenter();
+                    } catch (e) {
+                      debugPrint("Failed to show customer center: $e");
+                    }
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    gradient: isPro
+                        ? const LinearGradient(
+                            colors: [Colors.cyan, Colors.blueAccent],
+                          )
+                        : const LinearGradient(
+                            colors: [Colors.orangeAccent, Colors.redAccent],
+                          ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (isPro ? Colors.cyan : Colors.orangeAccent).withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isPro ? Icons.verified_user_rounded : Icons.bolt_rounded,
+                        color: Colors.white,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isPro ? "PRO" : "GET PRO",
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            );
-          },
+            ),
+          ],
         ),
       ),
     );

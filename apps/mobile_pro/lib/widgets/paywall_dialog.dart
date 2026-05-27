@@ -227,15 +227,18 @@ class _PaywallDialogState extends State<PaywallDialog> {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
+               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   GestureDetector(
                     onTap: () async {
                       try {
-                        final Uri uri = Uri.parse("https://castnow.vercel.app/terms.html");
+                        final Uri uri = Uri.parse("https://www.apple.com/legal/internet-services/itunes/dev/stdeula/");
                         if (await canLaunchUrl(uri)) {
                           await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        } else {
+                          // Fallback
+                          await launchUrl(uri, mode: LaunchMode.platformDefault);
                         }
                       } catch (e) {
                         debugPrint("Error launching terms EULA: $e");
@@ -250,6 +253,9 @@ class _PaywallDialogState extends State<PaywallDialog> {
                         final Uri uri = Uri.parse("https://castnow.vercel.app/privacy.html");
                         if (await canLaunchUrl(uri)) {
                           await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        } else {
+                          // Fallback
+                          await launchUrl(uri, mode: LaunchMode.platformDefault);
                         }
                       } catch (e) {
                         debugPrint("Error launching privacy: $e");
