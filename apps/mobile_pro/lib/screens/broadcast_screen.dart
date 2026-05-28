@@ -55,7 +55,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
 
 
   Timer? _limitTimer;
-  int _remainingSeconds = 180;
+  int _remainingSeconds = 120;
 
   @override
   void initState() {
@@ -134,7 +134,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
             children: [
               Icon(Icons.info_outline, color: Colors.white),
               SizedBox(width: 12),
-              Expanded(child: Text("Free Version: Streaming is limited to 3 minutes.", style: TextStyle(fontWeight: FontWeight.bold))),
+              Expanded(child: Text("Free Version: Streaming is limited to 2 minutes.", style: TextStyle(fontWeight: FontWeight.bold))),
             ],
           ),
           backgroundColor: Colors.blueGrey.shade800,
@@ -515,7 +515,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     showDialog(context: context, barrierDismissible: false, builder: (ctx) => AlertDialog(
       backgroundColor: kSurfaceColor,
       title: const Text("Time Limit Reached", style: TextStyle(color: Colors.cyanAccent)), 
-      content: const Text("Free streaming is limited to 3 minutes.\nUpgrade to PRO to continue this broadcast.", style: TextStyle(color: Colors.white70)),
+      content: const Text("Free streaming is limited to 2 minutes.\nUpgrade to PRO to continue this broadcast.", style: TextStyle(color: Colors.white70)),
       actions: [
         TextButton(
           onPressed: () {

@@ -103,7 +103,6 @@ const showFirefoxGuide = ref(false);
 const activationCode = ref("");
 const activeCode = ref("");
 const proExpiresAt = ref(null);
-const remainingSeconds = ref(180); // 3 minutes limit applied (previously 30)
 const toast = ref({ show: false, message: "", type: "info" });
 const receiverRoot = ref(null);
 let controlsTimeout = null;
