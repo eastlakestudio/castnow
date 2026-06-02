@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/constants.dart';
 import 'broadcast_screen.dart';
@@ -19,14 +18,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-
   Future<void> _launchURL(String url) async {
     try {
       final Uri uri = Uri.parse(url);
-      final mode = url.startsWith('mailto:') 
-          ? LaunchMode.platformDefault 
+      final mode = url.startsWith('mailto:')
+          ? LaunchMode.platformDefault
           : LaunchMode.externalApplication;
-          
+
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: mode);
       } else {
@@ -43,9 +41,9 @@ class _HomeScreenState extends State<HomeScreen> {
       int count = prefs.getInt('broadcast_completion_count') ?? 0;
       count++;
       await prefs.setInt('broadcast_completion_count', count);
-      
+
       debugPrint('Broadcast completion count: $count');
-      
+
       // Request review at specific milestones
       if (count == 3 || count == 10 || count == 20) {
         final InAppReview inAppReview = InAppReview.instance;
@@ -70,8 +68,8 @@ class _HomeScreenState extends State<HomeScreen> {
             style: const TextStyle(
                 color: kPrimaryColor, fontWeight: FontWeight.bold)),
         content: SingleChildScrollView(
-            child:
-                SelectableText(content, style: const TextStyle(color: kTextSecondary))),
+            child: SelectableText(content,
+                style: const TextStyle(color: kTextSecondary))),
         actions: [
           if (url != null)
             TextButton(
@@ -130,7 +128,8 @@ class _HomeScreenState extends State<HomeScreen> {
         GestureDetector(
           onTap: () {
             if (!isPro) {
-              showDialog(context: context, builder: (_) => const PaywallDialog());
+              showDialog(
+                  context: context, builder: (_) => const PaywallDialog());
             }
           },
           child: Container(
@@ -179,7 +178,8 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.language_rounded, color: kPrimaryColor, size: 16),
+                const Icon(Icons.language_rounded,
+                    color: kPrimaryColor, size: 16),
                 const SizedBox(width: 8),
                 const Text(
                   "Receive on: ",
@@ -222,7 +222,10 @@ class _HomeScreenState extends State<HomeScreen> {
             color: kPrimaryColor,
             textColor: Colors.black,
             onTap: () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => BroadcastScreen(isPro: isPro)));
+              await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => BroadcastScreen(isPro: isPro)));
               _checkAndRequestReview();
             },
           ),
@@ -235,7 +238,8 @@ class _HomeScreenState extends State<HomeScreen> {
             color: kSurfaceColor,
             textColor: kTextPrimary,
             isOutlined: true,
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReceiveScreen())),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const ReceiveScreen())),
           ),
         ],
       ),
@@ -249,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth > 700;
                 final horizontalPadding = isWide ? 40.0 : 24.0;
-                
+
                 return Center(
                   child: SingleChildScrollView(
                     child: Padding(
@@ -260,23 +264,29 @@ class _HomeScreenState extends State<HomeScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const SizedBox(height: 20),
-                            isWide 
-                              ? Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Expanded(child: brandSection),
-                                    Container(width: 1, height: 180, color: Colors.white10, margin: const EdgeInsets.symmetric(horizontal: 40)),
-                                    Expanded(child: actionsSection),
-                                  ],
-                                )
-                              : Column(
-                                  children: [
-                                    brandSection,
-                                    const SizedBox(height: 48),
-                                    actionsSection,
-                                  ],
-                                ),
+                            isWide
+                                ? Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      Expanded(child: brandSection),
+                                      Container(
+                                          width: 1,
+                                          height: 180,
+                                          color: Colors.white10,
+                                          margin: const EdgeInsets.symmetric(
+                                              horizontal: 40)),
+                                      Expanded(child: actionsSection),
+                                    ],
+                                  )
+                                : Column(
+                                    children: [
+                                      brandSection,
+                                      const SizedBox(height: 48),
+                                      actionsSection,
+                                    ],
+                                  ),
                             const SizedBox(height: 48),
                             _buildFooter(isPro),
                             const SizedBox(height: 20),
@@ -294,7 +304,9 @@ class _HomeScreenState extends State<HomeScreen> {
               child: GestureDetector(
                 onTap: () {
                   if (!isPro) {
-                    showDialog(context: context, builder: (_) => const PaywallDialog());
+                    showDialog(
+                        context: context,
+                        builder: (_) => const PaywallDialog());
                   } else {
                     try {
                       RevenueCatUI.presentCustomerCenter();
@@ -304,7 +316,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     gradient: isPro
                         ? const LinearGradient(
@@ -316,7 +329,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: (isPro ? Colors.cyan : Colors.orangeAccent).withOpacity(0.3),
+                        color: (isPro ? Colors.cyan : Colors.orangeAccent)
+                            .withOpacity(0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -326,7 +340,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        isPro ? Icons.verified_user_rounded : Icons.bolt_rounded,
+                        isPro
+                            ? Icons.verified_user_rounded
+                            : Icons.bolt_rounded,
                         color: Colors.white,
                         size: 14,
                       ),
@@ -387,10 +403,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: isOutlined ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.15),
+                    color: isOutlined
+                        ? Colors.white.withOpacity(0.05)
+                        : Colors.black.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(icon, color: isOutlined ? kPrimaryColor : Colors.black87, size: 28),
+                  child: Icon(icon,
+                      color: isOutlined ? kPrimaryColor : Colors.black87,
+                      size: 28),
                 ),
                 const SizedBox(width: 20),
                 Expanded(
@@ -405,121 +425,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 4),
                       Text(subtitle,
                           style: TextStyle(
-                              color: isOutlined ? kTextSecondary : textColor.withOpacity(0.7),
+                              color: isOutlined
+                                  ? kTextSecondary
+                                  : textColor.withOpacity(0.7),
                               fontSize: 13)),
                     ],
                   ),
                 ),
                 Icon(Icons.arrow_forward_ios_rounded,
-                    color: isOutlined ? kTextSecondary : textColor.withOpacity(0.5),
+                    color: isOutlined
+                        ? kTextSecondary
+                        : textColor.withOpacity(0.5),
                     size: 16),
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUpgradeCard(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.indigo.shade900.withOpacity(0.8),
-            kSurfaceColor.withOpacity(0.6),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.cyanAccent.withOpacity(0.3), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.cyanAccent.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              showDialog(context: context, builder: (_) => const PaywallDialog());
-            },
-            borderRadius: BorderRadius.circular(24),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.cyanAccent.withOpacity(0.15),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.cyanAccent.withOpacity(0.2),
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(Icons.bolt_rounded, color: Colors.cyanAccent, size: 28),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Upgrade to CastNow Pro",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "Unlock unlimited broadcast & remove limits.",
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.cyanAccent,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.cyanAccent.withOpacity(0.4),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Text(
-                      "Get Pro",
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
           ),
         ),
@@ -550,11 +468,14 @@ class _HomeScreenState extends State<HomeScreen> {
               }),
               _buildFooterSeparator(),
             ],
-            _buildFooterLink("TERMS", () => _launchURL("https://castnow.vercel.app/terms.html")),
+            _buildFooterLink("TERMS",
+                () => _launchURL("https://castnow.vercel.app/terms.html")),
             _buildFooterSeparator(),
-            _buildFooterLink("PRIVACY", () => _launchURL("https://castnow.vercel.app/privacy.html")),
+            _buildFooterLink("PRIVACY",
+                () => _launchURL("https://castnow.vercel.app/privacy.html")),
             _buildFooterSeparator(),
-            _buildFooterLink("HELP", () => _launchURL("mailto:mingh.liu@gmail.com")),
+            _buildFooterLink(
+                "HELP", () => _launchURL("mailto:mingh.liu@gmail.com")),
           ],
         ),
       ],
