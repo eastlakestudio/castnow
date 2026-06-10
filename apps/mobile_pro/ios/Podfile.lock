@@ -3,6 +3,9 @@ PODS:
   - flutter_webrtc (0.12.6):
     - Flutter
     - WebRTC-SDK (= 125.6422.06)
+  - HaishinKit (1.8.3):
+    - Logboard (~> 2.5.0)
+  - Logboard (2.5.0)
   - permission_handler_apple (9.3.0):
     - Flutter
   - WebRTC-SDK (125.6422.06)
@@ -10,10 +13,13 @@ PODS:
 DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_webrtc (from `.symlinks/plugins/flutter_webrtc/ios`)
+  - HaishinKit (~> 1.8.0)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
 
 SPEC REPOS:
   trunk:
+    - HaishinKit
+    - Logboard
     - WebRTC-SDK
 
 EXTERNAL SOURCES:
@@ -27,9 +33,11 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_webrtc: 57f32415b8744e806f9c2a96ccdb60c6a627ba33
+  HaishinKit: 9ecae992938861cb33e58edb3cb1f63c28c821f4
+  Logboard: 4674a3d86681539a0ad1fca528d888b90871e268
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
   WebRTC-SDK: 79942c006ea64f6fb48d7da8a4786dfc820bc1db
 
-PODFILE CHECKSUM: ea662c2001cf69cbfeb92df9d549a890751a67ac
+PODFILE CHECKSUM: f5d1f62f5dd43981f8b409c1aaf9e61ac10da7df
 
 COCOAPODS: 1.16.2

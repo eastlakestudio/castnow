@@ -2,6 +2,8 @@ import ReplayKit
 import VideoToolbox
 import CoreImage
 import Foundation
+import HaishinKit
+import AVFoundation
 
 class SocketConnection {
     private let filePath: String
@@ -94,6 +96,11 @@ class SampleHandler: RPBroadcastSampleHandler {
     private var lastFrameTime: Int64 = 0
     private let frameIntervalNs: Int64 = 1_000_000_000 / 22 
     private var connectionTimer: Timer?
+    
+    // RTMP Settings
+    private var isRtmpMode = false
+    private var rtmpConnection: RTMPConnection?
+    private var rtmpStream: RTMPStream?
 
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
         print("🚀 Broadcast Extension Started")
@@ -110,6 +117,28 @@ class SampleHandler: RPBroadcastSampleHandler {
             let errorMsg = "App Group Error: Client [\(bundleID)] is not entitled for \(appGroupIdentifier). Check project settings."
             finishBroadcastWithError(NSError(domain: "SampleHandler", code: 1, userInfo: [NSLocalizedDescriptionKey : errorMsg]))
             return
+        }
+        
+        if let defaults = UserDefaults(suiteName: appGroupIdentifier) {
+            let mode = defaults.string(forKey: "broadcast_mode") ?? "p2p"
+            isRtmpMode = (mode == "rtmp")
+            
+            if isRtmpMode {
+                let url = defaults.string(forKey: "rtmp_url") ?? ""
+                let key = defaults.string(forKey: "rtmp_key") ?? ""
+                print("🚀 Starting RTMP Mode to \(url)")
+                
+                FeatureUtil.setEnabled(for: .multiTrackAudioMixing, isEnabled: true)
+                let connection = RTMPConnection()
+                let stream = RTMPStream(connection: connection)
+                
+                self.rtmpConnection = connection
+                self.rtmpStream = stream
+                
+                connection.connect(url)
+                stream.publish(key)
+                return
+            }
         }
         
         let socketPath = container.appendingPathComponent("rtc_SSFD").path
@@ -166,6 +195,14 @@ class SampleHandler: RPBroadcastSampleHandler {
     
     override func broadcastFinished() {
         print("🛑 Broadcast Finished")
+        if isRtmpMode {
+            rtmpStream?.close()
+            rtmpConnection?.close()
+            rtmpStream = nil
+            rtmpConnection = nil
+            return
+        }
+        
         connectionTimer?.invalidate()
         connectionTimer = nil
         client?.close()
@@ -173,6 +210,22 @@ class SampleHandler: RPBroadcastSampleHandler {
     }
     
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
+        if isRtmpMode {
+            if let stream = rtmpStream {
+                switch sampleBufferType {
+                case .video:
+                    stream.append(sampleBuffer, track: 0)
+                case .audioMic:
+                    stream.append(sampleBuffer, track: 0)
+                case .audioApp:
+                    stream.append(sampleBuffer, track: 1)
+                @unknown default:
+                    break
+                }
+            }
+            return
+        }
+        
         // We focus on video for currently P2P transmission, but we don't block audio buffers
         // to comply with background audio requirements.
         guard let client = client else { return }

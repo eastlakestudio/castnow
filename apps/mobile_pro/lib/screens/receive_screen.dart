@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:peerdart/peerdart.dart';
@@ -103,7 +104,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       debugPrint("✅ [v9.1] Connected as: $id. Signaling: $code");
       
       try {
-        await Permission.microphone.request();
+        if (!kIsWeb && !Platform.isMacOS) {
+          await Permission.microphone.request();
+        }
         _localMicStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
         for (var t in _localMicStream!.getAudioTracks()) { t.enabled = false; }
         

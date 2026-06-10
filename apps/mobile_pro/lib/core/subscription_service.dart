@@ -30,7 +30,7 @@ class SubscriptionService extends ChangeNotifier {
   @visibleForTesting
   static bool debugForceIOS = false;
 
-  bool get _isIOS => debugForceIOS || Platform.isIOS;
+  bool get _isIOS => debugForceIOS || Platform.isIOS || Platform.isMacOS;
   bool get _isAndroid => !debugForceIOS && Platform.isAndroid;
 
   bool get isSubscribed => _isSubscribed;

@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/constants.dart';
 import 'broadcast_screen.dart';
@@ -94,6 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final isPro = context.watch<SubscriptionService>().isSubscribed;
     final orientation = MediaQuery.of(context).orientation;
     final isLandscape = orientation == Orientation.landscape;
+    final l10n = AppLocalizations.of(context);
 
     Widget brandSection = Column(
       mainAxisSize: MainAxisSize.min,
@@ -115,8 +118,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: Colors.green, shape: BoxShape.circle),
               ),
               const SizedBox(width: 8),
-              const Text("P2P SECURE",
-                  style: TextStyle(
+              Text(l10n.p2pSecure,
+                  style: const TextStyle(
                       color: kTextSecondary,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
@@ -181,9 +184,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 const Icon(Icons.language_rounded,
                     color: kPrimaryColor, size: 16),
                 const SizedBox(width: 8),
-                const Text(
-                  "Receive on: ",
-                  style: TextStyle(
+                Text(
+                  l10n.receiveOn,
+                  style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -216,8 +219,8 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           _buildActionButton(
             context,
-            title: "Broadcast",
-            subtitle: "Share camera or screen",
+            title: l10n.broadcast,
+            subtitle: l10n.broadcastSubtitle,
             icon: Icons.wifi_tethering,
             color: kPrimaryColor,
             textColor: Colors.black,
@@ -225,15 +228,15 @@ class _HomeScreenState extends State<HomeScreen> {
               await Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => BroadcastScreen(isPro: isPro)));
+                      builder: (_) => const BroadcastScreen()));
               _checkAndRequestReview();
             },
           ),
           const SizedBox(height: 16),
           _buildActionButton(
             context,
-            title: "Receive",
-            subtitle: "Watch a stream",
+            title: l10n.receive,
+            subtitle: l10n.receiveSubtitle,
             icon: Icons.download_rounded,
             color: kSurfaceColor,
             textColor: kTextPrimary,
@@ -308,10 +311,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         context: context,
                         builder: (_) => const PaywallDialog());
                   } else {
-                    try {
-                      RevenueCatUI.presentCustomerCenter();
-                    } catch (e) {
-                      debugPrint("Failed to show customer center: $e");
+                    // macOS 不支持 presentCustomerCenter，改为打开 App Store 订阅管理
+                    if (Platform.isIOS) {
+                      try {
+                        RevenueCatUI.presentCustomerCenter();
+                      } catch (e) {
+                        debugPrint("Failed to show customer center: $e");
+                      }
+                    } else {
+                      _launchURL("https://apps.apple.com/account/subscriptions");
                     }
                   }
                 },
@@ -348,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        isPro ? "PRO" : "GET PRO",
+                        isPro ? l10n.pro : l10n.getPro,
                         style: const TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w900,
@@ -446,10 +454,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFooter(bool isPro) {
+    final l10n = AppLocalizations.of(context);
     return Column(
       children: [
-        const Text("CastNow P2P Engine v2.5",
-            style: TextStyle(
+        Text(l10n.footerEngine,
+            style: const TextStyle(
                 color: Colors.white24,
                 fontSize: 10,
                 letterSpacing: 2,
@@ -459,23 +468,28 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (isPro) ...[
-              _buildFooterLink("MANAGE", () async {
-                try {
-                  await RevenueCatUI.presentCustomerCenter();
-                } catch (e) {
-                  debugPrint("Failed to show customer center: $e");
+              _buildFooterLink(l10n.footerManage, () async {
+                // macOS 不支持 presentCustomerCenter，改为打开 App Store 订阅管理
+                if (Platform.isIOS) {
+                  try {
+                    await RevenueCatUI.presentCustomerCenter();
+                  } catch (e) {
+                    debugPrint("Failed to show customer center: $e");
+                  }
+                } else {
+                  _launchURL("https://apps.apple.com/account/subscriptions");
                 }
               }),
               _buildFooterSeparator(),
             ],
-            _buildFooterLink("TERMS",
+            _buildFooterLink(l10n.footerTerms,
                 () => _launchURL("https://castnow.vercel.app/terms.html")),
             _buildFooterSeparator(),
-            _buildFooterLink("PRIVACY",
+            _buildFooterLink(l10n.footerPrivacy,
                 () => _launchURL("https://castnow.vercel.app/privacy.html")),
             _buildFooterSeparator(),
             _buildFooterLink(
-                "HELP", () => _launchURL("mailto:mingh.liu@gmail.com")),
+                l10n.footerHelp, () => _launchURL("mailto:mingh.liu@gmail.com")),
           ],
         ),
       ],

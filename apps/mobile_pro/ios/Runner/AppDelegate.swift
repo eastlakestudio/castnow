@@ -58,6 +58,33 @@ import StoreKit
             }
         }
     }
+    if let registrar = self.registrar(forPlugin: "RTMPSettingsPlugin") {
+        let rtmpChannel = FlutterMethodChannel(name: "castnow_rtmp_settings", binaryMessenger: registrar.messenger())
+        rtmpChannel.setMethodCallHandler { (call, result) in
+            if call.method == "saveSettings" {
+                guard let args = call.arguments as? [String: Any] else {
+                    result(FlutterError(code: "INVALID_ARGS", message: "Arguments missing", details: nil))
+                    return
+                }
+                let mode = args["mode"] as? String ?? "p2p"
+                let url = args["url"] as? String ?? ""
+                let key = args["key"] as? String ?? ""
+                
+                let appGroupIdentifier = Bundle.main.object(forInfoDictionaryKey: "RTCAppGroupIdentifier") as? String ?? "group.com.eastlakestudio.castnow.pro"
+                if let defaults = UserDefaults(suiteName: appGroupIdentifier) {
+                    defaults.set(mode, forKey: "broadcast_mode")
+                    defaults.set(url, forKey: "rtmp_url")
+                    defaults.set(key, forKey: "rtmp_key")
+                    // No need to synchronize() on iOS 12+ but good practice
+                    result(true)
+                } else {
+                    result(FlutterError(code: "DEFAULTS_ERROR", message: "Could not access AppGroup UserDefaults", details: nil))
+                }
+            } else {
+                result(FlutterMethodNotImplemented)
+            }
+        }
+    }
     
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

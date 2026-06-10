@@ -2,13 +2,15 @@
 name: castnow_pro
 description: "CastNow Pro - Unlimited P2P Screen Sharing"
 publish_to: 'none'
-version: 3.1.1+21
+version: 3.1.2+23
 
 environment:
   sdk: '>=3.2.3 <4.0.0'
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   # 原生 WebRTC 支持 (音视频核心)
   flutter_webrtc: ^0.12.5

@@ -23,22 +23,18 @@ class _PaywallDialogState extends State<PaywallDialog> {
 
   Future<void> _trackImpression() async {
     final subService = context.read<SubscriptionService>();
-    final offeringId = subService.annualPackage?.offeringIdentifier;
+    final offeringId = subService.annualPackage?.offeringIdentifier ?? 'default';
     
-    if (offeringId != null) {
-      try {
-        // 使用 10.x SDK 官方最新的 Dart 接口直接上报自定义付费墙曝光
-        await Purchases.trackCustomPaywallImpression(
-          params: CustomPaywallImpressionParams(
-            offeringId: offeringId,
-          ),
-        );
-        debugPrint("[PaywallDialog] Showed custom paywall & tracked impression via Dart API: $offeringId");
-      } catch (e) {
-        debugPrint("[PaywallDialog] Failed to track custom paywall impression: $e");
-      }
-    } else {
-      debugPrint("[PaywallDialog] No offeringIdentifier available.");
+    try {
+      // 使用 10.x SDK 官方最新的 Dart 接口直接上报自定义付费墙曝光
+      await Purchases.trackCustomPaywallImpression(
+        params: CustomPaywallImpressionParams(
+          offeringId: offeringId,
+        ),
+      );
+      debugPrint("[PaywallDialog] Showed custom paywall & tracked impression via Dart API: $offeringId");
+    } catch (e) {
+      debugPrint("[PaywallDialog] Failed to track custom paywall impression: $e");
     }
   }
 
