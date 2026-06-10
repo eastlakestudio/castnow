@@ -339,7 +339,13 @@ class _BroadcastScreenState extends State<BroadcastScreen>
             'url': _rtmpUrlController.text.trim(),
             'key': _rtmpKeyController.text.trim(),
           });
-          if (mounted) setState(() => _isLoading = false);
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+              _isConnected = true;
+              _peerId = "RTMP (macOS)"; // 关键：给一个假 ID，让 build 认为已经在连线中
+            });
+          }
         } catch (e) {
           debugPrint("❌ [Mac RTMP Error]: $e");
           if (mounted) {
@@ -913,27 +919,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
         backgroundColor: kBackgroundColor,
         body: Stack(
           children: [
-            Positioned(
-              top: 50,
-              left: 20,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white24, width: 1),
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+
             Container(
               decoration: BoxDecoration(
                 gradient: RadialGradient(

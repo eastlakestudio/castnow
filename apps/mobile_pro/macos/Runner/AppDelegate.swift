@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import VideoToolbox
 
 @main
 class AppDelegate: FlutterAppDelegate {
@@ -93,6 +94,10 @@ public class MacRtmpManager: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
                 session.addInput(screenInput)
             }
         }
+        
+        rtmpStream?.videoSettings.videoSize = CGSize(width: 1920, height: 1080)
+        rtmpStream?.videoSettings.bitRate = 4_000_000 // 4 Mbps
+        rtmpStream?.videoSettings.profileLevel = kVTProfileLevel_H264_High_AutoLevel as String
         
         // 2. Audio Input (Microphone)
         if let audioDevice = AVCaptureDevice.default(for: .audio) {
