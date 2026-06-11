@@ -228,8 +228,9 @@ class _BroadcastScreenState extends State<BroadcastScreen>
         try {
           if (Platform.isAndroid) {
             var status = await Permission.notification.status;
-            if (status.isDenied)
+            if (status.isDenied) {
               status = await Permission.notification.request();
+            }
             if (status.isGranted) {
               await const MethodChannel('castnow_picker').invokeMethod(
                   'startMediaProjectionService',
@@ -350,7 +351,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
           debugPrint("❌ [Mac RTMP Error]: $e");
           if (mounted) {
             setState(() => _isLoading = false);
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("RTMP Error: $e")));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text("RTMP Error: $e")));
           }
         }
         return; // Skip WebRTC P2P
@@ -427,11 +429,12 @@ class _BroadcastScreenState extends State<BroadcastScreen>
       _peerSubscriptions.add(_peer!.on("open").listen(
         (id) {
           debugPrint("✅ [PEER] Broadcast ready on ID: $id");
-          if (mounted)
+          if (mounted) {
             setState(() {
               _peerId = id;
               _isLoading = false;
             });
+          }
         },
         onError: (e) => debugPrint("❌ [PEER] Open Stream Error: $e"),
         cancelOnError: false,
@@ -474,8 +477,9 @@ class _BroadcastScreenState extends State<BroadcastScreen>
             debugPrint(
                 "🔄 [PEER] Recoverable error detected, retrying in 3s...");
             Future.delayed(const Duration(seconds: 3), () {
-              if (mounted && !_isStopping)
+              if (mounted && !_isStopping) {
                 _connectWithRetry(code, isScreen, attempt + 1);
+              }
             });
           } else {
             if (mounted) setState(() => _isLoading = false);
@@ -566,7 +570,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
 
     _peerSubscriptions.add(call.on("stream").listen((remoteStream) {
       debugPrint("🎙️ [PEER] Received talkback stream!");
-      if (remoteStream.getAudioTracks().isNotEmpty && (Platform.isAndroid || Platform.isIOS)) {
+      if (remoteStream.getAudioTracks().isNotEmpty &&
+          (Platform.isAndroid || Platform.isIOS)) {
         Helper.setSpeakerphoneOn(true);
       }
       if (mounted) {
@@ -588,8 +593,6 @@ class _BroadcastScreenState extends State<BroadcastScreen>
       }
     }));
   }
-
-
 
   void _stopBroadcast() async {
     if (!mounted || _isStopping) return;
@@ -919,7 +922,6 @@ class _BroadcastScreenState extends State<BroadcastScreen>
         backgroundColor: kBackgroundColor,
         body: Stack(
           children: [
-
             Container(
               decoration: BoxDecoration(
                 gradient: RadialGradient(
@@ -931,7 +933,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
               child: SafeArea(
                 child: Center(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 40),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -946,7 +949,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                                 letterSpacing: 2)),
                         const SizedBox(height: 8),
                         const Text("Select what to broadcast to the receiver",
-                            style: TextStyle(color: kTextSecondary, fontSize: 13)),
+                            style:
+                                TextStyle(color: kTextSecondary, fontSize: 13)),
                         const SizedBox(height: 40),
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 400),
@@ -959,8 +963,9 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                                   value: _shareScreen,
                                   onChanged: (val) {
                                     HapticFeedback.selectionClick();
-                                    if (!val && !_shareCamera)
+                                    if (!val && !_shareCamera) {
                                       return; // Force at least one
+                                    }
                                     setState(() {
                                       _shareScreen = val;
                                       if (val) _shareCamera = false;
@@ -973,8 +978,9 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                                   value: _shareCamera,
                                   onChanged: (val) {
                                     HapticFeedback.selectionClick();
-                                    if (!val && !_shareScreen)
+                                    if (!val && !_shareScreen) {
                                       return; // Force at least one
+                                    }
                                     setState(() {
                                       _shareCamera = val;
                                       if (val) _shareScreen = false;
@@ -1001,7 +1007,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                                     if (val && !isPro) {
                                       showDialog(
                                           context: context,
-                                          builder: (_) => const PaywallDialog());
+                                          builder: (_) =>
+                                              const PaywallDialog());
                                       return;
                                     }
                                     setState(() => _isRtmpMode = val);
@@ -1092,7 +1099,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: kPrimaryColor,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 22),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 22),
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(24)),
                                 elevation: 0,
@@ -1297,7 +1305,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                                     children: [
                                       // Screen sharing placeholder to prevent local loops
                                       Expanded(
-                                          child: _buildScreenSharingPlaceholder()),
+                                          child:
+                                              _buildScreenSharingPlaceholder()),
                                       Container(
                                           width:
                                               isLandscape ? 1 : double.infinity,

@@ -6,7 +6,7 @@ import 'app_localizations.dart';
 
 /// The translations for Chinese (`zh`).
 class AppLocalizationsZh extends AppLocalizations {
-  AppLocalizationsZh([String locale = 'zh']) : super(locale);
+  AppLocalizationsZh([String locale = 'zh']) : super(Locale(locale));
 
   @override
   String get appTitle => 'CastNow - 屏幕投屏';

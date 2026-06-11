@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:castnow_pro/core/subscription_service.dart';
 import 'package:castnow_pro/screens/broadcast_screen.dart';
+import 'package:castnow_pro/l10n/app_localizations.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +33,12 @@ void main() {
           'managementURL': null,
         };
       }
+      if (call.method == 'getOfferings') {
+        return {'all': {}, 'current': null};
+      }
+      if (call.method == 'getProductInfo' || call.method == 'getProducts') {
+        return [];
+      }
       return null;
     });
 
@@ -55,11 +62,14 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<SubscriptionService>.value(
         value: subscriptionService,
-        child: const MaterialApp(
-          home: BroadcastScreen(isPro: true),
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const BroadcastScreen(isPro: true),
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     // Verify that the title is present
     expect(find.text('SELECT SOURCES'), findsOneWidget);
@@ -85,11 +95,14 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<SubscriptionService>.value(
         value: subscriptionService,
-        child: const MaterialApp(
-          home: BroadcastScreen(isPro: true),
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const BroadcastScreen(isPro: true),
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     // Initially "Screen Mirror" is true (default)
     // We can't easily check the 'value' property of a custom AnimatedContainer 
