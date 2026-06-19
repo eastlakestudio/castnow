@@ -128,27 +128,30 @@ class _PaywallDialogState extends State<PaywallDialog> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "CastNow VIP - 1 Year",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "CastNow VIP - 1 Year",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          "1 Year (Auto-Renewable)\nBilled yearly, cancel anytime",
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
+                          SizedBox(height: 4),
+                          Text(
+                            "1 Year (Auto-Renewable)\nBilled yearly, cancel anytime",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       subService.annualPackage != null 
                           ? "${subService.annualPackage!.storeProduct.priceString}/yr" 

@@ -6,10 +6,12 @@ import 'core/subscription_service.dart';
 import 'screens/home_screen.dart';
 import 'l10n/app_localizations.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
   final subscriptionService = SubscriptionService();
-  await subscriptionService.init();
+  
+  // 初始化服务，但不阻塞 runApp
+  subscriptionService.init();
 
   runApp(
     ChangeNotifierProvider.value(

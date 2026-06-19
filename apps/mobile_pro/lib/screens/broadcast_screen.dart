@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:async';
-import 'dart:ui' as ui;
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -249,7 +248,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
               'audio': false
             });
           } else {
-            screenStream = await navigator.mediaDevices.getDisplayMedia({'video': true, 'audio': false});
+            screenStream = await navigator.mediaDevices
+                .getDisplayMedia({'video': true, 'audio': false});
           }
         } catch (e) {
           debugPrint("⚠️ [BROADCAST] Screen capture failed: $e");

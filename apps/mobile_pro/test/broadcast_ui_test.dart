@@ -15,9 +15,11 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(purchasesChannel, (call) async {
-      if (call.method == 'setupPurchases' || call.method == 'setLogLevel') return null;
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(purchasesChannel, (call) async {
+      if (call.method == 'setupPurchases' || call.method == 'setLogLevel')
+        return null;
       if (call.method == 'getCustomerInfo') {
         return {
           'entitlements': {'all': {}, 'active': {}},
@@ -42,7 +44,8 @@ void main() {
       return null;
     });
 
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(subUtilsChannel, (call) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(subUtilsChannel, (call) async {
       if (call.method == 'getOriginalAppVersion') return '3.0.0';
       return null;
     });
@@ -52,20 +55,23 @@ void main() {
   });
 
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(purchasesChannel, null);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(subUtilsChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(purchasesChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(subUtilsChannel, null);
   });
 
-  testWidgets('BroadcastScreen Source Selection UI Test', (WidgetTester tester) async {
+  testWidgets('BroadcastScreen Source Selection UI Test',
+      (WidgetTester tester) async {
     final subscriptionService = SubscriptionService();
-    
+
     await tester.pumpWidget(
       ChangeNotifierProvider<SubscriptionService>.value(
         value: subscriptionService,
-        child: MaterialApp(
+        child: const MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const BroadcastScreen(isPro: true),
+          home: BroadcastScreen(isPro: true),
         ),
       ),
     );
@@ -73,7 +79,8 @@ void main() {
 
     // Verify that the title is present
     expect(find.text('SELECT SOURCES'), findsOneWidget);
-    expect(find.text('Select what to broadcast to the receiver'), findsOneWidget);
+    expect(
+        find.text('Select what to broadcast to the receiver'), findsOneWidget);
 
     // Verify Source Cards exist
     expect(find.text('Screen Mirror'), findsOneWidget);
@@ -89,25 +96,26 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
   });
 
-  testWidgets('BroadcastScreen Toggle Source Test', (WidgetTester tester) async {
+  testWidgets('BroadcastScreen Toggle Source Test',
+      (WidgetTester tester) async {
     final subscriptionService = SubscriptionService();
 
     await tester.pumpWidget(
       ChangeNotifierProvider<SubscriptionService>.value(
         value: subscriptionService,
-        child: MaterialApp(
+        child: const MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const BroadcastScreen(isPro: true),
+          home: BroadcastScreen(isPro: true),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
     // Initially "Screen Mirror" is true (default)
-    // We can't easily check the 'value' property of a custom AnimatedContainer 
+    // We can't easily check the 'value' property of a custom AnimatedContainer
     // without exposing it, but we can verify it's tappable.
-    
+
     final screenCard = find.text('Screen Mirror');
     await tester.tap(screenCard);
     await tester.pumpAndSettle();
