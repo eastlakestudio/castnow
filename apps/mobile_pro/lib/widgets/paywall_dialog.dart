@@ -38,30 +38,6 @@ class _PaywallDialogState extends State<PaywallDialog> {
     }
   }
 
-  void _showInfoDialog(BuildContext context, String title, String content) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: kSurfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text(title,
-            style: const TextStyle(
-                color: kPrimaryColor, fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(
-            child:
-                SelectableText(content, style: const TextStyle(color: kTextSecondary))),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("CLOSE",
-                style: TextStyle(
-                    color: kPrimaryColor, fontWeight: FontWeight.bold)),
-          )
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final subService = context.watch<SubscriptionService>();

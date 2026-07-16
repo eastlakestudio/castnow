@@ -152,26 +152,9 @@ void main() {
     expect(service.isSubscribed, isTrue);
   });
 
-  test('isVersionLegacy correctly classifies legacy versions', () {
-    final service = SubscriptionService();
-
-    // Legacy
-    expect(service.isVersionLegacy('1.0'), isTrue);
-    expect(service.isVersionLegacy('1.0.0'), isTrue);
-    expect(service.isVersionLegacy('2.5'), isTrue);
-    expect(service.isVersionLegacy('2.9.9'), isTrue);
-    expect(service.isVersionLegacy('14'), isTrue);
-    expect(service.isVersionLegacy(' 1.0.0 '), isTrue);
-
-    // Non-legacy
-    expect(service.isVersionLegacy('3.0.1'), isFalse);
-    expect(service.isVersionLegacy('15'), isFalse);
-    expect(service.isVersionLegacy('4.0.0'), isFalse);
-    
-    expect(service.isVersionLegacy('3.0.0+15'), isFalse);
-    expect(service.isVersionLegacy('3.0.1+16'), isFalse);
-    expect(service.isVersionLegacy('3.1.0'), isFalse);
-    expect(service.isVersionLegacy('3.1.0+17'), isFalse);
+  test('isVersionLegacy was removed — no longer needed after Android removal', () {
+    // isVersionLegacy method was removed as part of the Android platform cleanup.
+    // This test exists as a placeholder to track the removal.
   });
 
   test('User with "pro" active entitlement is subscribed', () async {

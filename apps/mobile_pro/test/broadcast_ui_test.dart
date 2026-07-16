@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:castnow_pro/core/subscription_service.dart';
 import 'package:castnow_pro/screens/broadcast_screen.dart';
-import 'package:castnow_pro/l10n/app_localizations.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -69,8 +68,6 @@ void main() {
       ChangeNotifierProvider<SubscriptionService>.value(
         value: subscriptionService,
         child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
           home: BroadcastScreen(isPro: true),
         ),
       ),
@@ -104,8 +101,6 @@ void main() {
       ChangeNotifierProvider<SubscriptionService>.value(
         value: subscriptionService,
         child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
           home: BroadcastScreen(isPro: true),
         ),
       ),

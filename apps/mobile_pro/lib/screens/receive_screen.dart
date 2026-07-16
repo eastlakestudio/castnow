@@ -64,9 +64,6 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     if (Platform.isIOS) {
       final iosInfo = await deviceDocs.iosInfo;
       return {'model': 'CastNow', 'os': 'iOS ${iosInfo.systemVersion}'};
-    } else if (Platform.isAndroid) {
-      final androidInfo = await deviceDocs.androidInfo;
-      return {'model': 'CastNow', 'os': 'Android ${androidInfo.version.release}'};
     }
     return {'model': 'Mobile', 'os': 'Unknown'};
   }
@@ -153,7 +150,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
       // 🎥 Robust Auto-Exit: Only exit when ALL tracks are no longer live
       void checkExit() {
-        final liveTracks = s.getTracks().where((t) => t.state != null && t.state!.index == 0).toList(); 
+        final liveTracks = s.getTracks().where((t) => t.readyState == 'live').toList();
         debugPrint("🎬 [v9.1] Checking exit status. Live total tracks: ${liveTracks.length}");
         if (liveTracks.isEmpty) {
           debugPrint("📺 [v9.1] No more live video tracks. Exiting...");
@@ -324,22 +321,26 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                           onChanged: (v) => setState(() {}),
                         ),
                       ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: List.generate(6, (i) {
-                          final char = _codeController.text.length > i ? _codeController.text[i] : "";
-                          final active = _codeController.text.length == i;
-                          return Container(
-                            width: 48, height: 64,
-                            decoration: BoxDecoration(
-                              color: kSurfaceColor,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: active ? kPrimaryColor : Colors.white10, width: 2),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(char, style: const TextStyle(color: kPrimaryColor, fontSize: 28, fontWeight: FontWeight.bold)),
-                          );
-                        }),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: List.generate(6, (i) {
+                            final char = _codeController.text.length > i ? _codeController.text[i] : "";
+                            final active = _codeController.text.length == i;
+                            return Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 3),
+                              width: 40, height: 60,
+                              decoration: BoxDecoration(
+                                color: kSurfaceColor,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: active ? kPrimaryColor : Colors.white10, width: 2),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(char, style: const TextStyle(color: kPrimaryColor, fontSize: 26, fontWeight: FontWeight.bold)),
+                            );
+                          }),
+                        ),
                       ),
                     ],
                   ),

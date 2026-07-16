@@ -3,7 +3,9 @@ export default {
   content: [
     "./index.html",
     "./App.vue",
-    "./main.js"
+    "./main.js",
+    "./components/**/*.vue",
+    "./composables/**/*.js"
   ],
   theme: {
     extend: {

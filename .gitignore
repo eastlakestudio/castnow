@@ -6,3 +6,5 @@ appstore/
 android_store/
 apps/mobile_pro/build/
 apps/mobile/ios/build/
+.openspec/skills/
+.qoder/skills

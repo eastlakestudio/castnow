@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'core/constants.dart';
 import 'core/subscription_service.dart';
 import 'screens/home_screen.dart';
-import 'l10n/app_localizations.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,9 +34,7 @@ class CastNowApp extends StatelessWidget {
       title: 'CastNow - Screen Cast',
       debugShowCheckedModeBanner: false,
 
-      // 国际化配置
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+      // 国际化配置 (English-only — locale delegates removed)
 
       theme: ThemeData(
         useMaterial3: true,

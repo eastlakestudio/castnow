@@ -1,0 +1,37 @@
+schema: spec-driven
+
+# Project context
+context: |
+  CastNow is a high-performance P2P screen sharing engine with zero-install, zero-sign-up, 4K support.
+  
+  Tech Stack:
+  - Web: Vue 3 (Composition API), Vite, TailwindCSS, PeerJS, vue-i18n
+  - Mobile: Flutter, Dart, flutter_webrtc, peerdart, RevenueCat
+  - Infrastructure: Vercel (hosting), PeerJS Cloud (signaling), node-media-server (RTMP)
+  - Monorepo: npm workspaces (apps/web, apps/mobile_pro)
+  
+  Architecture:
+  - Core communication: WebRTC P2P with v9.1 Media-Only Handshake protocol
+  - Signaling: PeerJS public cloud (0.peerjs.com)
+  - Multi-source streaming: Screen + Camera + Mic via track ordering (Screen=Track0, Camera=Track1)
+  - Receiver layout: Picture-in-Picture (draggable, resizable) + Side-by-Side (splittable)
+  - Pro subscription: RevenueCat with 2-minute free tier limit
+  
+  Coding Conventions:
+  - Chinese comments, English code identifiers
+  - Vue 3 <script setup> with Composition API
+  - Flutter uses Provider for state management
+  - Debug logs use emoji prefixes (🎙️, 📡, ❌, etc.)
+
+# Per-artifact rules
+rules:
+  proposal:
+    - Must identify affected platforms (Web, iOS, Android)
+    - Must reference existing v9.1 handshake protocol if changing signaling
+    - Keep proposals under 800 words
+  design:
+    - If adding new WebRTC tracks, must respect Track 0=Screen, Track 1=Camera ordering
+    - UI changes must support both touch and mouse interaction
+  tasks:
+    - Break tasks into chunks of max 4 hours
+    - Must include verification step for each task

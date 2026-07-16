@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:castnow_pro/screens/home_screen.dart';
 import 'package:castnow_pro/core/subscription_service.dart';
-import 'package:castnow_pro/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:mockito/mockito.dart';
 
@@ -20,8 +19,6 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
         home: ChangeNotifierProvider<SubscriptionService>.value(
           value: mockSubService,
           child: const HomeScreen(),

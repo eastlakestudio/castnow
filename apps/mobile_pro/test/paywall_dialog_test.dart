@@ -49,27 +49,12 @@ class MockSubscriptionService extends ChangeNotifier implements SubscriptionServ
   
   @override
   void resetForTesting() {}
-  
-  @override
-  bool isVersionLegacy(String version) => false;
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const MethodChannel channel = MethodChannel('purchases_flutter');
-  bool impressionTracked = false;
-
-  setUp(() {
-    impressionTracked = false;
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (MethodCall methodCall) async {
-      if (methodCall.method == 'trackCustomPaywallImpression') {
-        impressionTracked = true;
-        return null;
-      }
-      return null;
-    });
-  });
 
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);

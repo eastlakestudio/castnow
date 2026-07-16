@@ -2,7 +2,7 @@
 
 [![Project License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform - Web](https://img.shields.io/badge/platform-Web-orange.svg)](#appsweb)
-[![Platform - iOS/Android](https://img.shields.io/badge/platform-iOS%2FAndroid-blue.svg)](#appsmobile)
+[![Platform - iOS](https://img.shields.io/badge/platform-iOS-blue.svg)](#appsmobile_pro)
 
 **CastNow** is a high-performance, native P2P screen sharing engine. It allows instant screen casting directly from your browser or mobile device to any receiver with zero installation, zero sign-up, and 4K support.
 
@@ -24,7 +24,7 @@ This is a monorepo containing both the web and mobile implementations:
 castnow/
 ├── apps/
 │   ├── web/        # Vue 3 + Vite + TailwindCSS web application
-│   └── mobile/     # Flutter-based mobile application (iOS & Android)
+│   └── mobile_pro/ # Flutter-based mobile application (iOS)
 ├── package.json    # Monorepo configuration and helper scripts
 └── README.md
 ```
@@ -33,7 +33,7 @@ castnow/
 The web client built with **Vue 3**, **Vite**, and **TailwindCSS**. It serves as both a sender (screen/camera casting) and a receiver.
 
 ### 📱 [apps/mobile](./apps/mobile)
-The native mobile application built with **Flutter**. It uses **flutter_webrtc** and **peerdart** to provide a high-performance, native casting experience on iOS and Android.
+The native mobile application built with **Flutter**. It uses **flutter_webrtc** and **peerdart** to provide a high-performance, native casting experience on iOS.
 
 ---
 
@@ -72,7 +72,7 @@ The native mobile application built with **Flutter**. It uses **flutter_webrtc**
 
 1. Navigate to the mobile app directory:
    ```bash
-   cd apps/mobile
+   cd apps/mobile_pro
    ```
 2. Get packages:
    ```bash

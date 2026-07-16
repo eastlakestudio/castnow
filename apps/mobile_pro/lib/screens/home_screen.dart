@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../l10n/app_localizations.dart';
+import '../l10n/app_strings.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/constants.dart';
 import 'broadcast_screen.dart';
@@ -59,44 +59,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showInfoDialog(BuildContext context, String title, String content,
-      {String? url, String? urlText}) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: kSurfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text(title,
-            style: const TextStyle(
-                color: kPrimaryColor, fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(
-            child: SelectableText(content,
-                style: const TextStyle(color: kTextSecondary))),
-        actions: [
-          if (url != null)
-            TextButton(
-              onPressed: () => _launchURL(url),
-              child: Text(urlText ?? "OPEN",
-                  style: const TextStyle(
-                      color: kPrimaryColor, fontWeight: FontWeight.bold)),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("CLOSE",
-                style: TextStyle(
-                    color: kPrimaryColor, fontWeight: FontWeight.bold)),
-          )
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final isPro = context.watch<SubscriptionService>().isSubscribed;
     final orientation = MediaQuery.of(context).orientation;
     final isLandscape = orientation == Orientation.landscape;
-    final l10n = AppLocalizations.of(context);
 
     Widget brandSection = Column(
       mainAxisSize: MainAxisSize.min,
@@ -118,7 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: Colors.green, shape: BoxShape.circle),
               ),
               const SizedBox(width: 8),
-              Text(l10n.p2pSecure,
+              Text(AppStrings.p2pSecure,
                   style: const TextStyle(
                       color: kTextSecondary,
                       fontSize: 10,
@@ -185,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: kPrimaryColor, size: 16),
                 const SizedBox(width: 8),
                 Text(
-                  l10n.receiveOn,
+                  AppStrings.receiveOn,
                   style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 13,
@@ -219,8 +187,8 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           _buildActionButton(
             context,
-            title: l10n.broadcast,
-            subtitle: l10n.broadcastSubtitle,
+            title: AppStrings.broadcast,
+            subtitle: AppStrings.broadcastSubtitle,
             icon: Icons.wifi_tethering,
             color: kPrimaryColor,
             textColor: Colors.black,
@@ -235,8 +203,8 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 16),
           _buildActionButton(
             context,
-            title: l10n.receive,
-            subtitle: l10n.receiveSubtitle,
+            title: AppStrings.receive,
+            subtitle: AppStrings.receiveSubtitle,
             icon: Icons.download_rounded,
             color: kSurfaceColor,
             textColor: kTextPrimary,
@@ -356,7 +324,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        isPro ? l10n.pro : l10n.getPro,
+                        isPro ? AppStrings.pro : AppStrings.getPro,
                         style: const TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w900,
@@ -454,10 +422,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFooter(bool isPro) {
-    final l10n = AppLocalizations.of(context);
     return Column(
       children: [
-        Text(l10n.footerEngine,
+        Text(AppStrings.footerEngine,
             style: const TextStyle(
                 color: Colors.white24,
                 fontSize: 10,
@@ -468,7 +435,7 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (isPro) ...[
-              _buildFooterLink(l10n.footerManage, () async {
+              _buildFooterLink(AppStrings.footerManage, () async {
                 // macOS 不支持 presentCustomerCenter，改为打开 App Store 订阅管理
                 if (Platform.isIOS) {
                   try {
@@ -482,14 +449,14 @@ class _HomeScreenState extends State<HomeScreen> {
               }),
               _buildFooterSeparator(),
             ],
-            _buildFooterLink(l10n.footerTerms,
+            _buildFooterLink(AppStrings.footerTerms,
                 () => _launchURL("https://castnow.vercel.app/terms.html")),
             _buildFooterSeparator(),
-            _buildFooterLink(l10n.footerPrivacy,
+            _buildFooterLink(AppStrings.footerPrivacy,
                 () => _launchURL("https://castnow.vercel.app/privacy.html")),
             _buildFooterSeparator(),
             _buildFooterLink(
-                l10n.footerHelp, () => _launchURL("mailto:mingh.liu@gmail.com")),
+                AppStrings.footerHelp, () => _launchURL("mailto:mingh.liu@gmail.com")),
           ],
         ),
       ],

@@ -31,7 +31,6 @@ class SubscriptionService extends ChangeNotifier {
   static bool debugForceIOS = false;
 
   bool get _isIOS => debugForceIOS || Platform.isIOS || Platform.isMacOS;
-  bool get _isAndroid => !debugForceIOS && Platform.isAndroid;
 
   bool get isSubscribed => _isSubscribed;
   bool get isAvailable => _isAvailable;
@@ -51,8 +50,6 @@ class SubscriptionService extends ChangeNotifier {
     PurchasesConfiguration? configuration;
     if (_isIOS) {
       configuration = PurchasesConfiguration(RevenueCatConfig.appleApiKey);
-    } else if (_isAndroid && RevenueCatConfig.googleApiKey.isNotEmpty) {
-      configuration = PurchasesConfiguration(RevenueCatConfig.googleApiKey);
     }
     
     if (configuration != null) {
@@ -200,8 +197,6 @@ class SubscriptionService extends ChangeNotifier {
   }
 
   Future<void> _checkIfShouldDowngrade() async {
-    final prefs = await SharedPreferences.getInstance();
-
     await _setSubscribed(false);
   }
 
