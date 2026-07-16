@@ -15,6 +15,7 @@ import '../widgets/paywall_dialog.dart';
 import '../widgets/source_selector.dart';
 import '../widgets/broadcast_controls.dart';
 import '../widgets/code_display.dart';
+import '../widgets/glass_container.dart';
 
 class BroadcastScreen extends StatefulWidget {
   final bool isPro;
@@ -369,63 +370,62 @@ class _BroadcastScreenState extends State<BroadcastScreen>
 
   Widget _buildScreenSharingPlaceholder() {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
-        gradient: RadialGradient(
-          center: Alignment.center,
-          radius: 1.0,
-          colors: [Colors.cyan.withOpacity(0.15), const Color(0xFF0F172A)],
-        ),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0F172A),
       ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.cyanAccent.withOpacity(0.05),
-                border: Border.all(
-                    color: Colors.cyanAccent.withOpacity(0.2), width: 1),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.cyanAccent.withOpacity(0.1),
-                      blurRadius: 30,
-                      spreadRadius: 2),
-                ],
-              ),
-              child: const Icon(Icons.screen_share_rounded,
-                  color: Colors.cyanAccent, size: 48),
+      child: Stack(
+        children: [
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.cyanAccent.withOpacity(0.05),
+                    border: Border.all(
+                        color: Colors.cyanAccent.withOpacity(0.2), width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.cyanAccent.withOpacity(0.1),
+                          blurRadius: 30,
+                          spreadRadius: 2),
+                    ],
+                  ),
+                  child: const Icon(Icons.screen_share_rounded,
+                      color: Colors.cyanAccent, size: 48),
+                ),
+                const SizedBox(height: 20),
+                GlassContainer(
+                  blurSigma: 4,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  borderRadius: 16,
+                  child: const Text('Screen Mirroring Active',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5)),
+                ),
+                const SizedBox(height: 6),
+                Text('Sharing entire screen...',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.5), fontSize: 12)),
+              ],
             ),
-            const SizedBox(height: 20),
-            const Text('Screen Mirroring Active',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5)),
-            const SizedBox(height: 6),
-            Text('Sharing entire screen...',
-                style: TextStyle(
-                    color: Colors.white.withOpacity(0.5), fontSize: 12)),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildTipBar() {
     if (_webrtc.isConnected) return const SizedBox.shrink();
-    return Container(
+    return GlassContainer(
+      blurSigma: 8,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: kSurfaceColor.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(20),
-        border:
-            Border.all(color: Colors.cyanAccent.withOpacity(0.3), width: 1),
-        boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 15)],
-      ),
+      borderRadius: 20,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -466,7 +466,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
 
     // Source Selection View
     if (_webrtc.peerId == null && !_webrtc.isLoading) {
-      return _buildSourceSelectionView(isPro);
+      return _buildSourceSelectionView();
     }
 
     final isLandscape =
@@ -535,7 +535,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     );
   }
 
-  Widget _buildSourceSelectionView(bool isPro) {
+  Widget _buildSourceSelectionView() {
     return Scaffold(
       backgroundColor: kBackgroundColor,
       body: Stack(
@@ -549,101 +549,96 @@ class _BroadcastScreenState extends State<BroadcastScreen>
               ),
             ),
             child: SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 40),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.bolt_rounded,
-                          color: Colors.cyanAccent, size: 40),
-                      const SizedBox(height: 16),
-                      const Text('SELECT SOURCES',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 2)),
-                      const SizedBox(height: 8),
-                      const Text(
-                          'Select what to broadcast to the receiver',
-                          style: TextStyle(
-                              color: kTextSecondary, fontSize: 13)),
-                      const SizedBox(height: 40),
-                      ConstrainedBox(
-                        constraints:
-                            const BoxConstraints(maxWidth: 400),
-                        child: SourceSelector(
-                          shareScreen: _shareScreen,
-                          shareCamera: _shareCamera,
-                          shareMic: _shareMic,
-                          isRtmpMode: _isRtmpMode,
-                          isPro: isPro,
-                          rtmpUrlController: _rtmpUrlController,
-                          rtmpKeyController: _rtmpKeyController,
-                          onScreenChanged: (val) => setState(() {
-                            _shareScreen = val;
-                            if (val) _shareCamera = false;
-                          }),
-                          onCameraChanged: (val) => setState(() {
-                            _shareCamera = val;
-                            if (val) _shareScreen = false;
-                          }),
-                          onMicChanged: (val) =>
-                              setState(() => _shareMic = val),
-                          onRtmpChanged: (val) =>
-                              setState(() => _isRtmpMode = val),
-                          onPaywallTrigger: () => showDialog(
-                              context: context,
-                              builder: (_) => const PaywallDialog()),
-                        ),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.bolt_rounded,
+                              color: Colors.cyanAccent, size: 36),
+                          const SizedBox(height: 12),
+                          const Text('SELECT SOURCES',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 2)),
+                          const SizedBox(height: 6),
+                          const Text(
+                              'Select what to broadcast to the receiver',
+                              style: TextStyle(
+                                  color: kTextSecondary, fontSize: 13)),
+                          const SizedBox(height: 24),
+                          ConstrainedBox(
+                            constraints:
+                                const BoxConstraints(maxWidth: 400),
+                            child: SourceSelector(
+                              shareScreen: _shareScreen,
+                              shareCamera: _shareCamera,
+                              shareMic: _shareMic,
+                              isRtmpMode: _isRtmpMode,
+                              rtmpUrlController: _rtmpUrlController,
+                              rtmpKeyController: _rtmpKeyController,
+                              onScreenChanged: (val) => setState(() {
+                                _shareScreen = val;
+                                if (val) _shareCamera = false;
+                              }),
+                              onCameraChanged: (val) => setState(() {
+                                _shareCamera = val;
+                                if (val) _shareScreen = false;
+                              }),
+                              onMicChanged: (val) =>
+                                  setState(() => _shareMic = val),
+                              onRtmpChanged: (val) =>
+                                  setState(() => _isRtmpMode = val),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 48),
-                      SizedBox(
-                        width: 320,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                  color: kPrimaryColor.withOpacity(0.3),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 10)),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                    child: SizedBox(
+                      width: 320,
+                      child: GlassContainer(
+                        blurSigma: 8,
+                        showGradientBorder: false,
+                        borderRadius: 24,
+                        child: ElevatedButton(
+                          onPressed: _startBroadcast,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kPrimaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 22),
+                            shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(24)),
+                            elevation: 0,
+                          ),
+                          child: const Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.center,
+                            children: [
+                              Text('START BROADCAST',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 16,
+                                      letterSpacing: 1.5)),
+                              SizedBox(width: 12),
+                              Icon(Icons.arrow_forward_rounded,
+                                  size: 20),
                             ],
                           ),
-                          child: ElevatedButton(
-                            onPressed: _startBroadcast,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: kPrimaryColor,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 22),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(24)),
-                              elevation: 0,
-                            ),
-                            child: const Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.center,
-                              children: [
-                                Text('START BROADCAST',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 16,
-                                        letterSpacing: 1.5)),
-                                SizedBox(width: 12),
-                                Icon(Icons.arrow_forward_rounded,
-                                    size: 20),
-                              ],
-                            ),
-                          ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
@@ -704,9 +699,9 @@ class _BroadcastScreenState extends State<BroadcastScreen>
           Container(
             padding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
                 color: Colors.black54,
-                borderRadius: BorderRadius.circular(20)),
+                borderRadius: BorderRadius.all(Radius.circular(20))),
             child: Row(children: [
               Icon(Icons.circle,
                   color: _webrtc.isConnected

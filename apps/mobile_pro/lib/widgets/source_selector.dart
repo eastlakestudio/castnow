@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/constants.dart';
+import 'glass_container.dart';
 
 class SourceSelector extends StatelessWidget {
   final bool shareScreen;
   final bool shareCamera;
   final bool shareMic;
   final bool isRtmpMode;
-  final bool isPro;
   final TextEditingController rtmpUrlController;
   final TextEditingController rtmpKeyController;
   final Function(bool) onScreenChanged;
   final Function(bool) onCameraChanged;
   final Function(bool) onMicChanged;
   final Function(bool) onRtmpChanged;
-  final VoidCallback onPaywallTrigger;
 
   const SourceSelector({
     super.key,
@@ -22,14 +21,12 @@ class SourceSelector extends StatelessWidget {
     required this.shareCamera,
     required this.shareMic,
     required this.isRtmpMode,
-    required this.isPro,
     required this.rtmpUrlController,
     required this.rtmpKeyController,
     required this.onScreenChanged,
     required this.onCameraChanged,
     required this.onMicChanged,
     required this.onRtmpChanged,
-    required this.onPaywallTrigger,
   });
 
   @override
@@ -77,28 +74,33 @@ class SourceSelector extends StatelessWidget {
           value: isRtmpMode,
           onChanged: (val) {
             HapticFeedback.selectionClick();
-            if (val && !isPro) {
-              onPaywallTrigger();
-              return;
-            }
             onRtmpChanged(val);
           },
         ),
-        if (isRtmpMode) ...[
-          const SizedBox(height: 16),
-          TextField(
-            controller: rtmpUrlController,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-            decoration: _rtmpInputDecoration('RTMP URL', 'rtmp://your-server/live'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: rtmpKeyController,
-            obscureText: true,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-            decoration: _rtmpInputDecoration('Stream Key', 'Enter stream key'),
-          ),
-        ],
+        // RTMP 字段区域：始终预留空间
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          height: isRtmpMode ? 140 : 0,
+          child: isRtmpMode
+              ? Column(
+                  children: [
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: rtmpUrlController,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      decoration: _rtmpInputDecoration('RTMP URL', 'rtmp://your-server/live'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: rtmpKeyController,
+                      obscureText: true,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      decoration: _rtmpInputDecoration('Stream Key', 'Enter stream key'),
+                    ),
+                  ],
+                )
+              : const SizedBox.shrink(),
+        ),
       ],
     );
   }
@@ -137,30 +139,15 @@ class SourceSelector extends StatelessWidget {
       onTap: () => onChanged(!value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: value
-              ? LinearGradient(
-                  colors: [kPrimaryColor.withOpacity(0.2), kPrimaryColor.withOpacity(0.05)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
-              : null,
-          color: value ? null : Colors.white.withOpacity(0.02),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: value ? Colors.cyanAccent.withOpacity(0.5) : Colors.white10,
-            width: value ? 2 : 1,
-          ),
-          boxShadow: value
-              ? [
-                  BoxShadow(color: Colors.cyanAccent.withOpacity(0.1), blurRadius: 20, spreadRadius: -5),
-                  BoxShadow(color: kPrimaryColor.withOpacity(0.1), blurRadius: 10, spreadRadius: -2),
-                ]
-              : [],
-        ),
-        child: Row(
+        child: GlassContainer(
+          blurSigma: value ? 4 : 2,
+          showGradientBorder: false,
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          borderRadius: 20,
+          backgroundOpacity: value ? 0.08 : 0.02,
+          borderOpacity: value ? 0.4 : 0.1,
+          child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(12),
@@ -194,6 +181,7 @@ class SourceSelector extends StatelessWidget {
               child: value ? const Icon(Icons.check, size: 16, color: kBackgroundColor) : null,
             ),
           ],
+        ),
         ),
       ),
     );

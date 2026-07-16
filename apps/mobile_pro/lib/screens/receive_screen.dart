@@ -8,6 +8,7 @@ import 'package:peerdart/peerdart.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import '../core/constants.dart';
+import '../widgets/glass_container.dart';
 
 class ReceiveScreen extends StatefulWidget {
   final String? pairCode;
@@ -249,22 +250,27 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 right: 20, bottom: 40,
                 child: GestureDetector(
                   onTap: () => setState(() => _isSwapped = !_isSwapped),
-                  child: Container(
+                  child: GlassContainer(
+                    blurSigma: 4,
                     width: 120, height: 160,
-                    decoration: BoxDecoration(
-                      color: Colors.black,
+                    borderRadius: 16,
+                    borderOpacity: 0.2,
+                    backgroundOpacity: 0.02,
+                    child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white24, width: 2),
+                      child: RTCVideoView(!_isSwapped ? _pipRenderer : _remoteRenderer, 
+                        objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover),
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: RTCVideoView(!_isSwapped ? _pipRenderer : _remoteRenderer, 
-                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover),
                   ),
                 ),
               ),
             Positioned(
               top: 40, left: 16, right: 16,
-              child: Row(
+              child: GlassContainer(
+                blurSigma: 8,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                borderRadius: 20,
+                child: Row(
                 children: [
                   IconButton(icon: const Icon(Icons.close, color: Colors.white), 
                     onPressed: () => Navigator.pop(context)),
@@ -280,6 +286,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                   IconButton(icon: Icon(_isPlaybackMuted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
                     onPressed: _togglePlayback),
                 ],
+              ),
               ),
             ),
           ],
@@ -328,16 +335,17 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                           children: List.generate(6, (i) {
                             final char = _codeController.text.length > i ? _codeController.text[i] : "";
                             final active = _codeController.text.length == i;
-                            return Container(
+                            return GlassContainer(
+                              blurSigma: 2,
+                              showGradientBorder: false,
                               margin: const EdgeInsets.symmetric(horizontal: 3),
                               width: 40, height: 60,
-                              decoration: BoxDecoration(
-                                color: kSurfaceColor,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: active ? kPrimaryColor : Colors.white10, width: 2),
+                              borderRadius: 14,
+                              borderOpacity: active ? 0.5 : 0.1,
+                              backgroundOpacity: 0.08,
+                              child: Center(
+                                child: Text(char, style: const TextStyle(color: kPrimaryColor, fontSize: 26, fontWeight: FontWeight.bold)),
                               ),
-                              alignment: Alignment.center,
-                              child: Text(char, style: const TextStyle(color: kPrimaryColor, fontSize: 26, fontWeight: FontWeight.bold)),
                             );
                           }),
                         ),
@@ -348,8 +356,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 
                 const SizedBox(height: 48),
                 
-                SizedBox(
-                  width: double.infinity, height: 60,
+                GlassContainer(
+                  blurSigma: 8,
+                  showGradientBorder: false,
+                  width: double.infinity,
+                  height: 60,
+                  borderRadius: 20,
                   child: ElevatedButton(
                     onPressed: _join,
                     style: ElevatedButton.styleFrom(
@@ -364,7 +376,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 ),
                 
                 const SizedBox(height: 24),
-                Text("Ask broadcaster for key", style: TextStyle(color: kTextSecondary.withOpacity(0.5))),
+                GlassContainer(
+                  blurSigma: 4,
+                  showGradientBorder: false,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  borderRadius: 12,
+                  child: Text("Ask broadcaster for key", style: TextStyle(color: kTextSecondary.withOpacity(0.5))),
+                ),
               ],
             ),
           ),

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../core/constants.dart';
 import '../core/subscription_service.dart';
+import 'glass_container.dart';
 
 class PaywallDialog extends StatefulWidget {
   const PaywallDialog({super.key});
@@ -55,20 +55,10 @@ class _PaywallDialogState extends State<PaywallDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.all(24),
-      child: Container(
+      child: GlassContainer(
+        blurSigma: 8,
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: kSurfaceColor,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.cyanAccent.withOpacity(0.3), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.cyanAccent.withOpacity(0.1),
-              blurRadius: 30,
-              spreadRadius: 5,
-            )
-          ],
-        ),
+        borderRadius: 24,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -94,13 +84,10 @@ class _PaywallDialogState extends State<PaywallDialog> {
               _buildFeatureRow(Icons.hd_rounded, "HD Video Quality"),
               _buildFeatureRow(Icons.mic_rounded, "Crystal Clear Audio"),
               // Plan Duration details
-              Container(
+              GlassContainer(
+                blurSigma: 4,
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
-                ),
+                borderRadius: 16,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
+import 'glass_container.dart';
 
 class CodeDisplay extends StatelessWidget {
   final String? peerId;
@@ -29,14 +30,13 @@ class CodeDisplay extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: peerId!
                 .split('')
-                .map((char) => Container(
+                .map((char) => GlassContainer(
+                      blurSigma: 2,
+                      showGradientBorder: false,
                       margin: const EdgeInsets.symmetric(horizontal: 4),
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: kPrimaryColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: kPrimaryColor.withOpacity(0.3)),
-                      ),
+                      borderRadius: 12,
+                      borderOpacity: 0.15,
                       child: Text(char, style: const TextStyle(color: kPrimaryColor, fontSize: 32, fontWeight: FontWeight.bold)),
                     ))
                 .toList(),
@@ -44,13 +44,11 @@ class CodeDisplay extends StatelessWidget {
         ),
         if (isConnected && receiverInfo != null) ...[
           const SizedBox(height: 24),
-          Container(
+          GlassContainer(
+            blurSigma: 4,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.green.withOpacity(0.3)),
-            ),
+            borderRadius: 12,
+            borderOpacity: 0.3,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 import '../core/subscription_service.dart';
 import '../widgets/paywall_dialog.dart';
+import '../widgets/glass_container.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -69,32 +70,6 @@ class _HomeScreenState extends State<HomeScreen> {
     Widget brandSection = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white10),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: const BoxDecoration(
-                    color: Colors.green, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 8),
-              Text(AppStrings.p2pSecure,
-                  style: const TextStyle(
-                      color: kTextSecondary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1)),
-            ],
-          ),
-        ),
         const SizedBox(height: 12),
         GestureDetector(
           onTap: () {
@@ -107,19 +82,8 @@ class _HomeScreenState extends State<HomeScreen> {
             width: isLandscape ? 60 : 80,
             height: isLandscape ? 60 : 80,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1E293B), Color(0xFF020617)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
+              color: kPrimaryColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(isLandscape ? 18 : 24),
-              border: Border.all(color: Colors.white10),
-              boxShadow: [
-                BoxShadow(
-                    color: kPrimaryColor.withOpacity(0.1),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10))
-              ],
             ),
             child: Icon(Icons.bolt_rounded,
                 color: kPrimaryColor, size: isLandscape ? 36 : 48),
@@ -136,14 +100,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Container(
+        GlassContainer(
+          blurSigma: 4,
+          showGradientBorder: false,
           margin: const EdgeInsets.only(top: 12),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: kPrimaryColor.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: kPrimaryColor.withOpacity(0.2)),
-          ),
+          borderRadius: 20,
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Row(
@@ -291,27 +253,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                   }
                 },
-                child: Container(
+                child: GlassContainer(
+                  blurSigma: 8,
+                  showGradientBorder: false,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    gradient: isPro
-                        ? const LinearGradient(
-                            colors: [Colors.cyan, Colors.blueAccent],
-                          )
-                        : const LinearGradient(
-                            colors: [Colors.orangeAccent, Colors.redAccent],
-                          ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: (isPro ? Colors.cyan : Colors.orangeAccent)
-                            .withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
+                  borderRadius: 12,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -351,16 +298,11 @@ class _HomeScreenState extends State<HomeScreen> {
       required Color textColor,
       bool isOutlined = false,
       required VoidCallback onTap}) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        boxShadow: [
-          BoxShadow(
-              color: color.withOpacity(0.2),
-              blurRadius: 20,
-              offset: const Offset(0, 10))
-        ],
-      ),
+    return GlassContainer(
+      blurSigma: 4,
+      showGradientBorder: false,
+      borderRadius: 20,
+      margin: const EdgeInsets.only(bottom: 16),
       child: Material(
         color: isOutlined ? Colors.transparent : color,
         shape: RoundedRectangleBorder(
@@ -422,7 +364,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFooter(bool isPro) {
-    return Column(
+    return GlassContainer(
+      blurSigma: 4,
+      showGradientBorder: false,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      borderRadius: 16,
+      margin: const EdgeInsets.only(top: 16),
+      child: Column(
       children: [
         Text(AppStrings.footerEngine,
             style: const TextStyle(
@@ -460,6 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ],
+      ),
     );
   }
 

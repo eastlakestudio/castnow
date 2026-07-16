@@ -25,5 +25,5 @@
   @apply bg-slate-900;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-700 rounded-full hover:bg-amber-500/50 transition-colors;
+  @apply bg-slate-700 rounded-full hover:bg-cyan-500/50 transition-colors;
 }

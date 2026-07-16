@@ -206,18 +206,18 @@ const toggleFullscreen = () => layout.toggleFullscreen(receiverRoot.value);
 </script>
 
 <template>
-  <div class="min-h-[100dvh] flex flex-col bg-slate-950 text-slate-50 font-sans selection:bg-amber-500/30">
+  <div class="min-h-[100dvh] flex flex-col bg-slate-950 text-slate-50 font-sans selection:bg-cyan-500/30">
     <header v-if="appState !== STATES.RECEIVER_ACTIVE"
       class="flex items-center justify-between px-6 py-4 border-b border-slate-800/50 backdrop-blur-md sticky top-0 z-50">
       <div class="flex items-center gap-3 cursor-pointer group" @click="resetApp">
         <img src="/icon.svg" alt="CastNow"
-          class="w-10 h-10 rounded-xl shadow-lg shadow-amber-500/10 group-hover:scale-105 transition-transform duration-300" />
+          class="w-10 h-10 rounded-xl shadow-lg shadow-cyan-500/10 group-hover:scale-105 transition-transform duration-300" />
         <span class="bg-gradient-to-r from-slate-100 to-slate-400 bg-clip-text text-xl font-black italic uppercase tracking-tight text-transparent pr-1">CastNow</span>
       </div>
       <div class="flex items-center gap-4">
         <button @click="showInfo = 'source'"
           class="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl hover:border-slate-600 transition-all group">
-          <Globe class="w-4 h-4 text-slate-500 group-hover:text-amber-500 transition-colors" />
+          <Globe class="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition-colors" />
           <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-white transition-colors">Source</span>
         </button>
       </div>
@@ -227,24 +227,24 @@ const toggleFullscreen = () => layout.toggleFullscreen(receiverRoot.value);
     <div v-if="showFirefoxGuide"
       class="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center">
       <div class="bg-slate-900 border border-slate-800 p-8 rounded-[3rem] max-w-md w-full shadow-2xl relative overflow-hidden">
-        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-1 bg-amber-500 blur-sm"></div>
-        <div class="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Shield class="w-10 h-10 text-amber-500" />
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-1 bg-cyan-500 blur-sm"></div>
+        <div class="w-20 h-20 bg-cyan-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Shield class="w-10 h-10 text-cyan-400" />
         </div>
         <h3 class="text-2xl font-black uppercase mb-4 text-white">Firefox Detected</h3>
         <p class="text-slate-400 text-sm mb-6 leading-relaxed">Firefox's "Enhanced Tracking Protection" is blocking the P2P connection.</p>
         <div class="bg-black/50 rounded-xl p-4 mb-8 border border-white/5 text-left text-xs text-slate-300 space-y-3">
           <div class="flex items-center gap-3">
-            <div class="w-6 h-6 flex items-center justify-center bg-slate-800 rounded-full font-bold text-amber-500">1</div>
+            <div class="w-6 h-6 flex items-center justify-center bg-slate-800 rounded-full font-bold text-cyan-400">1</div>
             <span>Click the Shield Icon 🛡️ in the URL bar.</span>
           </div>
           <div class="flex items-center gap-3">
-            <div class="w-6 h-6 flex items-center justify-center bg-slate-800 rounded-full font-bold text-amber-500">2</div>
+            <div class="w-6 h-6 flex items-center justify-center bg-slate-800 rounded-full font-bold text-cyan-400">2</div>
             <span>Toggle the switch to OFF.</span>
           </div>
         </div>
         <button @click="() => { showFirefoxGuide = false; window.location.reload(); }"
-          class="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl uppercase tracking-widest transition-all active:scale-95">
+          class="w-full py-4 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black rounded-xl uppercase tracking-widest transition-all active:scale-95">
           I've Fixed It · Retry
         </button>
       </div>
@@ -294,13 +294,13 @@ const toggleFullscreen = () => layout.toggleFullscreen(receiverRoot.value);
         <div v-else-if="appState === STATES.BROADCAST_ENDED"
           class="flex-1 flex items-center justify-center p-6 bg-slate-950">
           <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-[3rem] p-10 text-center shadow-2xl">
-            <div class="w-24 h-24 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-8 animate-bounce">
-              <Info class="w-12 h-12 text-amber-500" />
+            <div class="w-24 h-24 bg-cyan-500/10 rounded-full flex items-center justify-center mx-auto mb-8 animate-bounce">
+              <Info class="w-12 h-12 text-cyan-400" />
             </div>
             <h3 class="text-3xl font-black uppercase mb-4 tracking-tight text-white">Broadcast Ended</h3>
             <p class="text-slate-400 text-base mb-10 font-medium">The session has been terminated by the broadcaster.</p>
             <button @click="resetApp(true)"
-              class="w-full py-6 bg-amber-500 text-slate-950 font-black rounded-2xl uppercase tracking-widest text-sm active:scale-95 transition-all shadow-xl shadow-amber-500/20">
+              class="w-full py-6 bg-cyan-500 text-slate-950 font-black rounded-2xl uppercase tracking-widest text-sm active:scale-95 transition-all shadow-xl shadow-cyan-500/20">
               Back to Home
             </button>
           </div>
@@ -333,13 +333,13 @@ const toggleFullscreen = () => layout.toggleFullscreen(receiverRoot.value);
                  @mousedown="layout.handleDragStart($event, 'splitter')"
                  @touchstart.passive="layout.handleDragStart($event, 'splitter')"
                  class="w-2 hover:w-4 -mx-1 hover:-mx-2 z-30 cursor-col-resize flex items-center justify-center transition-all group">
-              <div class="h-12 w-1 bg-white/20 rounded-full group-hover:bg-amber-500 transition-colors"></div>
+              <div class="h-12 w-1 bg-white/20 rounded-full group-hover:bg-cyan-500 transition-colors"></div>
             </div>
 
             <div v-if="cameraStream && screenStream"
                  :class="['overflow-hidden shadow-2xl group flex items-center justify-center',
                           isDragging ? 'no-transition' : 'transition-all duration-500',
-                          layoutMode === 'pip' ? 'absolute rounded-xl border border-white/20 cursor-move z-20 hover:border-amber-500/50' : 'relative rounded-2xl bg-slate-900']"
+                          layoutMode === 'pip' ? 'absolute rounded-xl border border-white/20 cursor-move z-20 hover:border-cyan-500/50' : 'relative rounded-2xl bg-slate-900']"
                  :style="layoutMode === 'pip' ? { left: pipPosition.x + 'px', top: pipPosition.y + 'px', width: pipWidth + 'px', height: 'auto', order: isSwapped ? 1 : 2, transition: isDragging ? 'none' : 'all 0.5s ease-in-out' } : { width: ((1 - splitRatio) * 100) + '%' }"
                  @mousedown="layout.handleDragStart($event, 'move-pip')"
                  @touchstart="layout.handleDragStart($event, 'move-pip')">
@@ -347,7 +347,7 @@ const toggleFullscreen = () => layout.toggleFullscreen(receiverRoot.value);
               <div v-if="layoutMode === 'side-by-side'" class="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold text-white uppercase tracking-widest">{{ isSwapped ? 'Screen' : 'Camera' }}</div>
               <div v-if="layoutMode === 'pip'" @mousedown.stop="layout.handleDragStart($event, 'resize-pip')"
                    class="absolute bottom-0 right-0 w-8 h-8 cursor-nwse-resize flex items-end justify-end p-1 group/resize">
-                <div class="w-4 h-4 text-white/40 group-hover/resize:text-amber-500 transition-colors">
+                <div class="w-4 h-4 text-white/40 group-hover/resize:text-cyan-400 transition-colors">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 19l4-4M10 19l9-9"/></svg>
                 </div>
               </div>
@@ -373,12 +373,12 @@ const toggleFullscreen = () => layout.toggleFullscreen(receiverRoot.value);
                 <div class="flex items-center gap-2">
                   <template v-if="cameraStream && screenStream">
                     <button @click="toggleLayout" title="Toggle Layout"
-                      class="p-4 bg-white/5 rounded-full text-white hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-95 group">
+                      class="p-4 bg-white/5 rounded-full text-white hover:bg-cyan-500 hover:text-slate-950 transition-all active:scale-95 group">
                       <Monitor v-if="layoutMode === 'pip'" class="w-6 h-6" />
                       <div v-else class="flex gap-0.5"><div class="w-2.5 h-4 bg-current rounded-sm"></div><div class="w-2.5 h-4 bg-current rounded-sm"></div></div>
                     </button>
                     <button @click="swapStreams" title="Swap Streams"
-                      class="p-4 bg-white/5 rounded-full text-white hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-95">
+                      class="p-4 bg-white/5 rounded-full text-white hover:bg-cyan-500 hover:text-slate-950 transition-all active:scale-95">
                       <Repeat class="w-6 h-6" />
                     </button>
                   </template>
@@ -394,7 +394,7 @@ const toggleFullscreen = () => layout.toggleFullscreen(receiverRoot.value);
                   <div class="w-px h-8 bg-white/10 mx-2"></div>
                   <button @click="toggleReceiverMic"
                     class="p-4 rounded-full transition-all active:scale-95 flex items-center gap-2 group"
-                    :class="isReceiverMicActive ? 'bg-amber-500 text-slate-950' : 'bg-white/5 text-white hover:bg-white/10'">
+                    :class="isReceiverMicActive ? 'bg-cyan-500 text-slate-950' : 'bg-white/5 text-white hover:bg-white/10'">
                     <Mic v-if="isReceiverMicActive" class="w-6 h-6" />
                     <MicOff v-else class="w-6 h-6 opacity-60" />
                     <span v-if="isReceiverMicActive" class="text-[10px] font-black uppercase pr-2">Microphone</span>
@@ -416,7 +416,7 @@ const toggleFullscreen = () => layout.toggleFullscreen(receiverRoot.value);
     <Transition name="fade">
       <div v-if="toast.show"
         class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-2xl shadow-2xl backdrop-blur-md border animate-in slide-in-from-bottom-5 duration-300"
-        :class="{ 'bg-amber-500/90 text-slate-950 border-amber-400': toast.type === 'success', 'bg-red-500/90 text-white border-red-400': toast.type === 'error', 'bg-slate-800/90 text-white border-slate-700': toast.type === 'info' }">
+        :class="{ 'bg-cyan-500/90 text-slate-950 border-cyan-400': toast.type === 'success', 'bg-red-500/90 text-white border-red-400': toast.type === 'error', 'bg-slate-800/90 text-white border-slate-700': toast.type === 'info' }">
         <div class="flex items-center gap-3">
           <Zap v-if="toast.type === 'success'" class="w-4 h-4 fill-current" />
           <AlertCircle v-else-if="toast.type === 'error'" class="w-4 h-4" />

@@ -43,17 +43,17 @@ const remoteVideoEl = ref(null);
   <!-- Receiver Input -->
   <div class="flex-1 flex flex-col items-center justify-center p-6">
     <h2 class="text-2xl font-black uppercase mb-10 tracking-widest flex items-center gap-3">
-      <span class="w-8 h-[2px] bg-amber-500"></span>
+      <span class="w-8 h-[2px] bg-cyan-500"></span>
       Enter Access Key
-      <span class="w-8 h-[2px] bg-amber-500"></span>
+      <span class="w-8 h-[2px] bg-cyan-500"></span>
     </h2>
 
     <div class="mb-10 flex gap-2 h-20 md:h-24">
       <div v-for="i in 6" :key="i"
-        class="w-12 md:w-16 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-center text-3xl md:text-4xl font-black text-white shadow-inner transition-colors duration-200"
+        class="w-12 md:w-16 backdrop-blur-sm bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center text-3xl md:text-4xl font-black text-white shadow-inner transition-colors duration-200"
         :class="{
-          'border-amber-500/50 text-amber-500': joinCode[i - 1],
-          'animate-pulse bg-slate-800/50': joinCode.length === i - 1,
+          'border-cyan-500/50 text-cyan-400': joinCode[i - 1],
+          'animate-pulse bg-white/10': joinCode.length === i - 1,
         }">
         {{ joinCode[i - 1] || '' }}
       </div>
@@ -81,7 +81,7 @@ const remoteVideoEl = ref(null);
     </div>
 
     <button @click="$emit('join')" :disabled="joinCode.length !== 6 || isConnecting"
-      class="w-full max-w-[280px] py-5 bg-amber-500 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-black rounded-2xl text-lg uppercase tracking-widest shadow-xl shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
+      class="w-full max-w-[280px] py-5 bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-black rounded-2xl text-lg uppercase tracking-widest shadow-xl shadow-cyan-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
       <Loader2 v-if="isConnecting" class="w-5 h-5 animate-spin" />
       <span v-else>Connect Now</span>
     </button>

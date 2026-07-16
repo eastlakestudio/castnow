@@ -26,23 +26,23 @@ const localVideoEl = ref(null);
 
 <template>
   <div class="flex-1 flex flex-col items-center justify-center p-4">
-    <div class="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-[3rem] p-8 text-center relative overflow-hidden shadow-2xl">
-      <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent animate-pulse"></div>
+    <div class="w-full max-w-xl backdrop-blur-xl bg-white/5 border border-white/10 rounded-[3rem] p-8 text-center relative overflow-hidden shadow-2xl">
+      <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent animate-pulse"></div>
 
       <div class="flex items-center justify-between mb-8">
         <div class="flex items-center gap-2">
-          <Activity class="w-4 h-4 text-amber-500" />
+          <Activity class="w-4 h-4 text-cyan-400" />
           <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Active Tunnel</span>
         </div>
         <div class="flex items-center gap-2">
           <button @click="$emit('toggleMic')"
-            class="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-full hover:bg-amber-500 hover:text-slate-950 transition-all"
+            class="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-full hover:bg-cyan-500 hover:text-slate-950 transition-all"
             :class="{ 'bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white': isMicMuted }">
             <component :is="isMicMuted ? VolumeX : Volume2" class="w-3 h-3" />
             <span class="text-[10px] font-black uppercase">{{ isMicMuted ? 'Muted' : 'Mic On' }}</span>
           </button>
           <button v-if="selectedSources.includes('camera') && hasMultipleCameras" @click="$emit('toggleCamera')"
-            class="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-full hover:bg-amber-500 hover:text-slate-950 transition-all">
+            class="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-full hover:bg-cyan-500 hover:text-slate-950 transition-all">
             <Repeat class="w-3 h-3" />
             <span class="text-[10px] font-black uppercase">{{ facingMode === 'user' ? 'Front' : 'Back' }}</span>
           </button>
@@ -53,7 +53,7 @@ const localVideoEl = ref(null);
         <p class="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-4">Sharing Access Key</p>
         <div class="flex items-center justify-center gap-2">
           <template v-for="(char, i) in peerId.split('')" :key="i">
-            <span class="text-4xl md:text-6xl font-black bg-slate-950 w-12 md:w-16 h-16 md:h-24 flex items-center justify-center rounded-2xl border border-slate-800 text-amber-500 shadow-inner">{{ char }}</span>
+            <span class="text-4xl md:text-6xl font-black bg-slate-950 w-12 md:w-16 h-16 md:h-24 flex items-center justify-center rounded-2xl border border-slate-800 text-cyan-400 shadow-inner">{{ char }}</span>
             <span v-if="i === 2" class="text-slate-800 font-black text-2xl">-</span>
           </template>
           <div v-if="!peerId" class="flex gap-2">

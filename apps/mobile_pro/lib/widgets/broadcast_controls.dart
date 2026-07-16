@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'glass_container.dart';
 
 class BroadcastControls extends StatelessWidget {
   final bool shareCamera;
@@ -22,14 +23,10 @@ class BroadcastControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GlassContainer(
+      blurSigma: 16,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E).withOpacity(0.95),
-        borderRadius: BorderRadius.circular(40),
-        border: Border.all(color: Colors.white10),
-        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 20)],
-      ),
+      borderRadius: 40,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
