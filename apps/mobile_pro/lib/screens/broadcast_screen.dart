@@ -104,10 +104,9 @@ class _BroadcastScreenState extends State<BroadcastScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive &&
-        (_isScreenSharing || _isRtmpMode)) {
-      _stopBroadcast();
-    }
+    // Do NOT stop broadcast on background/inactive — iOS Broadcast Extension
+    // and RTMP streaming are designed to run in the background. Only stop
+    // when the user explicitly taps the stop button.
   }
 
   void _toggleMute() {

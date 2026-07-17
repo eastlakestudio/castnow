@@ -17,7 +17,7 @@ class AppStrings {
   static const String receiveSubtitle = 'Watch a stream';
   static const String getPro = 'GET PRO';
   static const String pro = 'PRO';
-  static const String footerEngine = 'CastNow P2P Engine v3.1.3';
+  static const String footerEngine = 'CastNow P2P Engine v3.1.4';
   static const String footerManage = 'MANAGE';
   static const String footerTerms = 'TERMS';
   static const String footerPrivacy = 'PRIVACY';
